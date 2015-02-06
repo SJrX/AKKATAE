@@ -38,10 +38,11 @@ import ca.ubc.cs.beta.aeatk.concurrent.threadfactory.SequentiallyNamedThreadFact
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.AbstractAsyncTargetAlgorithmEvaluator;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.TargetAlgorithmEvaluatorCallback;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.TargetAlgorithmEvaluatorRunObserver;
-
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.master.MasterWatchDogActor;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.ObserverUpdateResponse;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.ProcessRunCompletedMessage;
+import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.RegisterLocalObserverInbox;
+import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.RegisterMailboxToBeShutdown;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.RequestObserverUpdateMessage;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.ShutdownMessage;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.UpdateObservationStatus;
@@ -70,7 +71,7 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 	
 	private final Inbox shutdownInbox;
 	
-	private final AtomicBoolean stopProcessingInbox = new AtomicBoolean(false);
+	private final AtomicBoolean notifyShutdownCalled = new AtomicBoolean(false);
 	
 	private final CountDownLatch inboxProcessingThreadDone = new CountDownLatch(1);
 	
@@ -141,6 +142,8 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 		inbox = Inbox.create(system);
 		
 		observerInbox = Inbox.create(system);
+		
+		observerInbox.send(masterWatchDog, new RegisterLocalObserverInbox());
 		
 		shutdownInbox = Inbox.create(system);
 		
@@ -225,9 +228,9 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 
 
 	@Override
-	public void notifyShutdown() {
+	public synchronized void notifyShutdown() {
 	
-		if(!this.stopProcessingInbox.compareAndSet(false, true))
+		if(!this.notifyShutdownCalled.compareAndSet(false, true))
 		{
 			return;
 		}
@@ -236,7 +239,7 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 		
 		shutdownInbox.send(masterWatchDog, new ShutdownMessage());
 	
-		String response = shutdownInbox.receive(new FiniteDuration(1, TimeUnit.DAYS)).toString();
+		Object o =  shutdownInbox.receive(new FiniteDuration(1, TimeUnit.DAYS)); //Waiting for object so that we know everything else before has been processed.
 		
 		log.info("Shutting down Inbox Processing Thread");
 		try {
@@ -271,32 +274,42 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 		public void run()
 		{
 			Thread.currentThread().setName("AKKA Observer Mailbox Reader");
-			while(true)
+			inbox.send(masterWatchDog, new RegisterMailboxToBeShutdown());
+			try 
 			{
-				Object o = observerInbox.receive(new FiniteDuration(28, TimeUnit.DAYS));
-				
-				
-				if(o instanceof ObserverUpdateResponse)
+				while(true)
 				{
-					ObserverUpdateResponse our = (ObserverUpdateResponse) o;
-					//System.err.println("Got Observation: " + ((ObserverUpdateResponse) o).getAlgorithmRunResult());
+					Object o = observerInbox.receive(new FiniteDuration(28, TimeUnit.DAYS));
 					
 					
-					AlgorithmRunResult result = our.getAlgorithmRunResult();
-					
-					
-					if(!result.isRunCompleted())
+					if(o instanceof ObserverUpdateResponse)
 					{
-						result = new RunningAlgorithmRunResult(result.getAlgorithmRunConfiguration(), result.getRuntime(), result.getRunLength(), result.getQuality(), result.getResultSeed(), result.getWallclockExecutionTime(), tokenToCallerContextMap.get(our.getProcessRun().getSubmitToken()).getKillHandler(result.getAlgorithmRunConfiguration()));
+						ObserverUpdateResponse our = (ObserverUpdateResponse) o;
+						//System.err.println("Got Observation: " + ((ObserverUpdateResponse) o).getAlgorithmRunResult());
+						
+						
+						AlgorithmRunResult result = our.getAlgorithmRunResult();
+						
+						
+						if(!result.isRunCompleted())
+						{
+							result = new RunningAlgorithmRunResult(result.getAlgorithmRunConfiguration(), result.getRuntime(), result.getRunLength(), result.getQuality(), result.getResultSeed(), result.getWallclockExecutionTime(), tokenToCallerContextMap.get(our.getProcessRun().getSubmitToken()).getKillHandler(result.getAlgorithmRunConfiguration()));
+						}
+						tokenToObserverRunResultMap.get(our.getProcessRun().getSubmitToken()).put(our.getAlgorithmRunResult().getAlgorithmRunConfiguration(), result);
+						
+						
+						AkkaTargetAlgorithmEvaluator.this.observerToFire.add(our.getProcessRun().getSubmitToken());
+					} else if (o instanceof ShutdownMessage)
+					{
+						break;
+					} else
+					{
+						log.error("Got unknown message on observer inbox: {}" ,o);
 					}
-					tokenToObserverRunResultMap.get(our.getProcessRun().getSubmitToken()).put(our.getAlgorithmRunResult().getAlgorithmRunConfiguration(), result);
-					
-					
-					AkkaTargetAlgorithmEvaluator.this.observerToFire.add(our.getProcessRun().getSubmitToken());
-				} else
-				{
-					log.error("Got unknown message on observer inbox: {}" ,o);
 				}
+			} finally
+			{
+				log.info("AKKA Observer Mailbox Reader shutting down");
 			}
 		}
 	}
@@ -317,9 +330,10 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 		@Override
 		public void run() {
 			
+			inbox.send(masterWatchDog, new RegisterMailboxToBeShutdown());
 			try 
 			{
-				while(!Thread.interrupted() && !stopProcessingInbox.get())
+				while(!Thread.interrupted() )
 				{
 					Object o = null;
 				
@@ -368,6 +382,9 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 						}
 						
 
+					} else if (o instanceof ShutdownMessage)
+					{
+						break;
 					}
 					
 				}

@@ -1,9 +1,11 @@
 package ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.master;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Queue;
@@ -14,6 +16,8 @@ import ca.ubc.cs.beta.aeatk.algorithmrunresult.ExistingAlgorithmRunResult;
 import ca.ubc.cs.beta.aeatk.algorithmrunresult.RunStatus;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.ProcessRunMessage;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.SubmitToken;
+import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.RegisterLocalObserverInbox;
+import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.RegisterMailboxToBeShutdown;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.WorkerAvailableMessage;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.ObserverUpdateResponse;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.ProcessRunCompletedMessage;
@@ -42,12 +46,28 @@ public class MasterWatchDogActor extends UntypedActor {
 	
 	private final Set<ActorRef> allWorkers = new HashSet<ActorRef>();
 	
+	//This must be a list because a mailbox may need to be notified more than once.
+	private final List<ActorRef> actorsToNotifyOfShutdown = new ArrayList<ActorRef>();
+	
 	private ActorRef observerRequestInbox;
 	
+	
+	private boolean isShutdown = false;
 	@Override
 	public void onReceive(Object message) throws Exception {
 		
-		if(message instanceof ProcessRunMessage)
+		
+		if(isShutdown == true)
+		{
+			getSender().tell(new ShutdownMessage(), getSelf());
+		}
+		if(message instanceof RegisterMailboxToBeShutdown)
+		{
+			actorsToNotifyOfShutdown.add(getSender());
+		} else if(message instanceof RegisterLocalObserverInbox)
+		{
+			observerRequestInbox = getSender();
+		}else if(message instanceof ProcessRunMessage)
 		{
 			/**
 			 * Arrives from TAE requesting that we do this run
@@ -93,10 +113,24 @@ public class MasterWatchDogActor extends UntypedActor {
 			{
 				ref.tell(message,getSelf());
 			}
-			getSender().tell("OKAY", getSelf());
+			
+			for(ActorRef ref: callerReferences.values())
+			{
+				ref.tell(message, getSelf());
+			}
+			
+			observerRequestInbox.tell(message, getSelf());
+			
+			getSender().tell(message, getSelf());
+			
+			
+			for(ActorRef ref : this.actorsToNotifyOfShutdown)
+			{
+				ref.tell(message, getSelf());
+			}
+			isShutdown = true;
 		} else if(message instanceof UpdateObservationStatus)
 		{
-			observerRequestInbox = getSender();
 			for(Entry<ActorRef, ProcessRunMessage> ent : workerToRunMap.entrySet())
 			{
 				ent.getKey().tell(new RequestObserverUpdateMessage(ent.getValue(), false), getSelf());
