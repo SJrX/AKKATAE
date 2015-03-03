@@ -1,0 +1,51 @@
+/***
+
+On Job Submission:
+TAE (on evaluateRunAsync) ==(Notifies Master Watchdog of every run to do [ Process Run ], and assigns to queue)==> Master Watchdog.
+MasterWatchDog ==> Assigns jobs to free workers if possible.
+
+
+On worker startup :
+
+1) Worker Starts up == (Notifies AkkaWorkerActor of start up with Master IP/Port [ ContactMaster ]) ==> AkkaWorkerActor
+2) AkkaWorkerActor (on ContactMaster) == (Tries to contact Akka Master Watchdog [WorkerAvailableMessage] ==> Master Watchdog
+3) Master Watchdog (on WorkerAvailable Message) == (Adds actor to queue of avaialble workers, and tries to assign if available).
+
+On Worker Free and Job in Queue:
+
+1) Master WatchDog == Notifies worker of run (Process Run message) ==> AkkaWorker.
+2) AkkaWorkerActor == Notifies AkkaWorker (raw Java) of the message ==> AkkaWorker (java class)
+3) AkkaWorker (on ProcessRun) == Submits run to TAE with observer ==> CLI TAE
+4) AkkaWorker (onObservation from TAE) == notifies AkkaWorker of the latest status of the run (LocalRunUpdateMessage) ==> AkkaWorkerActor (NOTE: AkkaWorkerActor does NOT! message WatchDogMaster on this)
+5) AkkaWorker (onComplete from TAE) == notifies AkkaWorker of the result [ ProcessRunCompleted ] ==> AkkaWorkerActor
+6) AkkaWorkerActor (on ProcessRunComplete) == Sets the current Process Run Message to null, and forwards message ==> Master WatchDog
+7) Master WatchDog == Adds worker to free queue, removes assignment of worker to run and vice-versa, assigns a run to the worker if possible,  Finds the caller and tells them ==> Inbox
+8) ProcessRunCompletionRunnable == Recieves message on inbox, updates data structures with completed and observed runs, then notifies either observer or callback, depending on if there are any more runs.
+9) Assuming all runs are complete, the callback notification thread pulls the token from the queue, removes the context ( to prevent further observations ), notifies the observer and then notifies the calback.
+
+
+
+
+Observations:
+
+1) Every 2 seconds the UpdateObservationStatusRequest Runnable fires a request == [ UpdateObservationStatus ] ==> MasterWatchDog
+2) MasterWatchDog (For every entry in the workerToRun map) == fires a RequestObserverStatusMessage message ==> AkkaWorkerActor
+3) AkkaWorkerActor (on RequestObserverUpdateMessage) == [ Best case: Tells the sender the latest update [ObserverUpdateResponse] , if any. If the request asked for a kill, we set a flag] 
+Async) Later when the TAE notifies AkkaWorker it will check this flag to see if the run should be killed.
+4) MasterWatchDog (on ObserverUpdateResponse), tells the Observer Request inbox the message.
+5) The ObserverMailBox reader retrieves the message and updates the data structures, then requests that the observer be fired.
+5) Token is removed from the queue, synchronized on, then checks to see if the context is removed (meaning the callback fired), checks to see if 250 ms have passed since we last notified the observer. Builds a list of results, notifies the observer, checks if any results were killed, and if so notifies Master Watchdog.
+
+
+
+
+
+TODO: AkkaWorker does not handle failures or exceptions.
+TODO: Protocol does not handle message delivery failures.
+
+
+
+
+
+
+

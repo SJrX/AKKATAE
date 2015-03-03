@@ -141,6 +141,7 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 		
 		inbox = Inbox.create(system);
 		
+		
 		observerInbox = Inbox.create(system);
 		
 		observerInbox.send(masterWatchDog, new RegisterLocalObserverInbox());

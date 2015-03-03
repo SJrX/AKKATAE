@@ -1,0 +1,34 @@
+AlgorithmRunConfigurationProducerActor
+
+evaluateRunAsync() ======
+
+A1) Create actor to manage sets of run. [can't fail]
+A2) Actor requests batches of workers from the singleton, a total order of requests is produced, which is ordered by priority of the number of runs done. [ RequestWorkers(n, priority) ] of singleton. This request is retried [fail]
+A5) Actor recieves request to use worker, new child actor is started to manage work. [If dropped nothing happens]
+A6) Child Actor periodically asks for update from child on run status. [Retried]
+
+
+
+
+
+
+
+AlgorithmRunConfigurationConsumerActor
+
+C1) Notifies Singleton that it is available for work when idle. This request is retried.
+A7) If a request for update comes in, check if it is the current run, if it is give update. if it isn't check local queue of old runs, if it isn't there send RejectedExecution message. If the request has a killbit, kill the run.
+A8) If the 
+
+
+
+
+Singleton===
+A3) Retrieves request for work and throws it in some priority based data structure, may recieve dupilcates.
+C2) Adds worker to queue of available workers.
+
+A4/C3) If a worker is available and there is a master requesting a worker it is assigned to the worker, by telling the master to use the worker.
+
+
+
+
+
