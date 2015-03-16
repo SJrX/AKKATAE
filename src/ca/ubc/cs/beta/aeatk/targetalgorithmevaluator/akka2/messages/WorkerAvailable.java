@@ -13,14 +13,20 @@ public class WorkerAvailable implements Serializable {
 	
 	private ActorRef worker;
 
-	public WorkerAvailable(ActorRef worker)
+	public String name;
+	
+	public WorkerAvailable(ActorRef worker, String workerName)
 	{
 		this.worker = worker;
+		this.name = workerName;
 	}
 
 	public ActorRef getWorkerActorRef() {
 		return worker;
-		
 	}
 
+	public String getWorkerName()
+	{
+		return name;
+	}
 }

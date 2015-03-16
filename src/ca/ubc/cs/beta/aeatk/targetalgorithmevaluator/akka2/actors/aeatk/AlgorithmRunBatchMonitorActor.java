@@ -1,5 +1,7 @@
 package ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.actors.aeatk;
 
+import java.io.Serializable;
+import java.lang.management.ManagementFactory;
 import java.util.ArrayDeque;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -23,6 +25,7 @@ import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.messages.AlgorithmRun
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.messages.AlgorithmRunProcessingFailed;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.messages.AlgorithmRunStatus;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.messages.AllAlgorithmRunsDispatched;
+import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.messages.DumpDebugInformation;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.messages.RequestRunBatch;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.messages.RequestRunConfigurationUpdate;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.messages.RequestWorkers;
@@ -56,8 +59,9 @@ public class AlgorithmRunBatchMonitorActor extends UntypedActor {
 	private final Map<AlgorithmRunConfiguration, ActorRef> rcToChildActor = new HashMap<>(); 
 	
 	private final RequestRunBatch runRequests;
-
-	private final AtomicInteger outstandingRequests;
+	
+	private final Map<AlgorithmRunConfiguration, AlgorithmRunResult> completedRuns = new HashMap<>();
+	
 
 	private double priority;
 	
@@ -65,9 +69,7 @@ public class AlgorithmRunBatchMonitorActor extends UntypedActor {
 	
 	private static final Logger log = LoggerFactory.getLogger(AlgorithmRunBatchMonitorActor.class);
 	
-	private Runnable pollCoordinator;
-	
-	private long lastTime = 0;
+	//private long lastTime = 0;
 	public static Props props(final RequestRunBatch runRequests, final double priority, final ActorRef coordinator)
 	{
 		return Props.create(new Creator<AlgorithmRunBatchMonitorActor>(){
@@ -94,80 +96,118 @@ public class AlgorithmRunBatchMonitorActor extends UntypedActor {
 		
 		this.priority = priority;
 		this.uuid = runRequests.getUUID();
-		this.outstandingRequests = new AtomicInteger(runsToDo.size());
+		
 	}
 	
 	
 	public void preStart()
 	{
-		pollCoordinator = new PollCoordinator(this.getSelf(), coordinator, outstandingRequests, priority, uuid);
+		final Poll msg = new Poll();
+		Runnable pollCoordinator = new Runnable()
+		{
+
+			@Override
+			public void run() {
+				getSelf().tell(msg, getSelf());
+			}
+			
+		};
 		scheduledTask = this.context().system().scheduler().schedule(Duration.create(0, TimeUnit.MILLISECONDS), Duration.create(15000, TimeUnit.MILLISECONDS),pollCoordinator, this.context().system().dispatcher());
 	}
 	
 	@Override
 	public void onReceive(Object arg0) throws Exception {
 		
-		//log.debug("Recieved message: {} ", arg0);
+		//log.debug("{} Recieved message: {} ", uuid, arg0);
 		if(arg0 instanceof WorkerPermit)
 		{
 			WorkerPermit wp = (WorkerPermit) arg0;
 			
-			
+			log.debug("UUID {} got worker permit: {} ", uuid, wp.getWorkerName());
 			if(runsToDo.size() > 0)
 			{
 				AlgorithmRunConfiguration rc = runsToDo.poll();
-				
-				
 				
 				
 				while( rc != null && unstartedRunsToKill.contains(rc))
 				{
 					unstartedRunsToKill.remove(rc);
 					
-					
-					AlgorithmRunStatus rs = new AlgorithmRunStatus(new ExistingAlgorithmRunResult(rc, RunStatus.KILLED, 0, 0, 0, 0,"Killed premptively by " + getClass().getSimpleName(), 0), uuid);
+					AlgorithmRunResult result = new ExistingAlgorithmRunResult(rc, RunStatus.KILLED, 0, 0, 0, 0,"Killed premptively by " + getClass().getSimpleName(), 0);
+					this.completedRuns.put(rc, result);
+					AlgorithmRunStatus rs = new AlgorithmRunStatus(result, uuid);
 					runRequests.getObserverRef().tell(rs, getSelf());
 					runRequests.getCompletionRef().tell(rs, getSelf());
 					
 					rc = runsToDo.poll();
 				}
 				
+				if(runsToDo.size() == 0)
+				{
+					log.debug("All runs dispatched for UUID : {}" , uuid);
+					context().parent().tell(new AllAlgorithmRunsDispatched(this.runRequests.getUUID()), getSelf());
+				}
+				
 				
 				if(rc != null)
 				{	
 					ActorRef child = this.context().actorOf(Props.create(AlgorithmRunMonitorActor.class,rc , wp.getWorker(), uuid));
-					outstandingRequests.decrementAndGet();
 					this.rcToChildActor.put(rc, child);
 					
-					if(runsToDo.size() == 0)
-					{
-						context().parent().tell(new AllAlgorithmRunsDispatched(), getSelf());
-					}
+					log.info("UUID {} Started processing seed: {}", uuid, rc.getProblemInstanceSeedPair().getSeed());
+					
+					
 				} else
 				{
-					getSender().tell(new WorkerAvailable(wp.getWorker()), getSelf());
+					
+
+					shutdownActorIfDone();
+					
+					if(wp.getUUID().equals(uuid))
+					{
+						//Permit was for us and we don't need it
+						log.debug("UUID: {} , Sending worker permit {} back to {} ", uuid, wp.getWorkerName(), this.coordinator);
+						this.coordinator.tell(new WorkerAvailable(wp.getWorker(), wp.getWorkerName()), getSelf());
+						requestWorkers(true);
+					}
+					
 					
 					
 				}
+				
+
+
+				
 				//log.info("Assignment run configuration to children: {}", runsToDo.size());
 			} else
 			{
 				//log.info("Don't need worker permit: {}", runsToDo.size());
 				//We don't need it, the worker is available
-				getSender().tell(new WorkerAvailable(wp.getWorker()), getSelf());
+				if(wp.getUUID().equals(uuid))
+				{
+					//Permit was for us and we don't need it
+					log.debug("UUID: {} , Sending worker permit {} back to {} ", uuid, wp.getWorkerName(), this.coordinator);
+					this.coordinator.tell(new WorkerAvailable(wp.getWorker(), wp.getWorkerName()), getSelf());
+					requestWorkers(true);
+				}
+				
+				
 			}
 			
 			
 		} else if(arg0 instanceof AlgorithmRunProcessingFailed)
 		{
+		
+			AlgorithmRunProcessingFailed arpf = (AlgorithmRunProcessingFailed) arg0;
 			
-			this.runsToDo.push(((AlgorithmRunProcessingFailed) arg0).getAlgorithmRunConfiguration());
+			this.runsToDo.push(arpf.getAlgorithmRunConfiguration());
 			
-			//((AlgorithmRunProcessingFailed) arg0).getAlgorithmRunConfiguration().getProblemInstanceSeedPair()
-			//log.info("Runs to do :  {}" ,  this.runsToDo.size() );
-			outstandingRequests.addAndGet(1);
+			rcToChildActor.remove(arpf.getAlgorithmRunConfiguration());
+			/**
+			 * Request worker
+			 */
 			
-			pollCoordinator.run();
+			requestWorkers(false);
 			
 			context().stop(getSender());
 			
@@ -181,30 +221,7 @@ public class AlgorithmRunBatchMonitorActor extends UntypedActor {
 			//log.warn("Notifying about: " + status.getAlgorithmRunResult().getResultLine()); 
 			if(status.getAlgorithmRunResult().getRunStatus().equals(RunStatus.ABORT))
 			{
-				/*
-				outstandingRequests.addAndGet(-runsToDo.size());
-				
-				for(AlgorithmRunConfiguration rc : runsToDo)
-				{
-					
-					AlgorithmRunResult result = new ExistingAlgorithmRunResult(rc, RunStatus.ABORT, 0,0,0,0,"Abort detected by other run, this run was terminated in AKKA Target Algorithm Evaluator before being dispatched");
-					runRequests.getCompletionRef().tell(new AlgorithmRunStatus(result), getSelf());
-				}
-				runsToDo.clear();
-				
-				//log.warn("ABORT detected shutting everything down");
-				for(Entry<AlgorithmRunConfiguration,ActorRef> ent : this.rcToChildActor.entrySet())
-				{
-					if(!ent.getValue().equals(getSender()))
-					{
-						//Tell everyone else to die
-						ent.getValue().tell(new RequestRunConfigurationUpdate(ent.getKey(), true, uuid), getSelf());
-					}
-					
-					
-				}
-				
-				*/
+				log.error("The AKKA Target Algorithm Evaluator detected an ABORT but does not currently short circuit the evaluation of runs");
 				
 			} 
 			
@@ -212,49 +229,58 @@ public class AlgorithmRunBatchMonitorActor extends UntypedActor {
 			if(status.getAlgorithmRunResult().isRunCompleted())
 			{
 				
+				this.completedRuns.put(status.getAlgorithmRunResult().getAlgorithmRunConfiguration(),status.getAlgorithmRunResult());
+				
 				rcToChildActor.remove(status.getAlgorithmRunResult().getAlgorithmRunConfiguration());
 				context().stop(getSender());
 				
-				if(rcToChildActor.isEmpty() && runsToDo.size() == 0)
-				{
-					//We are done
-					//log.debug("We are done all runs and shutting down");
-					context().stop(getSelf());
-					context().parent().tell(new AlgorithmRunBatchCompleted(uuid), getSelf());
-					
-					
-				}
+			
 				runRequests.getCompletionRef().tell(arg0, getSelf());
 
-				long currentTime = System.currentTimeMillis();
 				
-				if(lastTime != 0)
-				{
-					//log.debug("Run completed, remaining outstanding runs: {}, remaining queued runs: {} , time since last completed: {} seconds", rcToChildActor.size(), runsToDo.size(), (currentTime - lastTime) / 1000.0 );
-					
-				} else
-				{
-					//log.debug("Run completed, remaining outstanding runs: {}, remaining queued runs: {} ", rcToChildActor.size(), runsToDo.size());
-				}
-				lastTime = currentTime;
+				shutdownActorIfDone();
 				
-				pollCoordinator.run();
-					
+				requestWorkers(true);
 			}
 		
 			
 		} else if(arg0 instanceof RequestRunConfigurationUpdate)
 		{
-			ActorRef child = this.rcToChildActor.get(((RequestRunConfigurationUpdate) arg0).getAlgorithmRunConfiguration());
-			if(child != null)
+			
+			
+			RequestRunConfigurationUpdate rrcu = (RequestRunConfigurationUpdate) arg0;
+			
+			
+			if(this.completedRuns.containsKey(rrcu.getAlgorithmRunConfiguration()))
 			{
-				child.tell(arg0, getSelf());
+				AlgorithmRunStatus rs = new AlgorithmRunStatus(this.completedRuns.get(rrcu.getAlgorithmRunConfiguration()), uuid);
+				
+				this.runRequests.getObserverRef().tell(rs, getSelf());
+				this.runRequests.getCompletionRef().tell(rs, getSelf());
 			} else
 			{
-				if(((RequestRunConfigurationUpdate) arg0).getKillStatus())
+				ActorRef child = this.rcToChildActor.get(((RequestRunConfigurationUpdate) arg0).getAlgorithmRunConfiguration());
+	
+				
+				if(child != null)
 				{
-					unstartedRunsToKill.add(((RequestRunConfigurationUpdate) arg0).getAlgorithmRunConfiguration());
+					child.tell(arg0, getSelf());
 				}
+				
+				//Save this kill request in case the run is restarted
+				if(rrcu.getKillStatus())
+				{
+					
+					if(unstartedRunsToKill.add(rrcu.getAlgorithmRunConfiguration()))
+					{
+						log.warn("Unstarted run to kill for UUID: " + uuid);
+						
+						
+					}
+					
+					
+				}
+
 			}
 		}  else if (arg0 instanceof UpdateObservationStatus)
 		{
@@ -263,55 +289,101 @@ public class AlgorithmRunBatchMonitorActor extends UntypedActor {
 			{
 				ent.getValue().tell(new RequestRunConfigurationUpdate(ent.getKey(), false, uuid), getSelf());
 			}
+			
+			for(AlgorithmRunResult result : this.completedRuns.values())
+			{
+				AlgorithmRunStatus rs = new AlgorithmRunStatus(result, uuid);
+				
+				this.runRequests.getObserverRef().tell(rs, getSelf());
+				this.runRequests.getCompletionRef().tell(rs, getSelf());
+			}
+		} else if (arg0 instanceof DumpDebugInformation)
+		{
+			dumpDebugInformation();
+			
+		} else if (arg0 instanceof Poll)
+		{
+		
+			/*
+			 * int runsNeeded = this.runsNeeded.get();
+			
+			
+			 */
+			requestWorkers(false);
 		}else
 		{
 			unhandled(arg0);
 		}
 		
 	}
+
+
+	/**
+	 * 
+	 */
+	public void shutdownActorIfDone() {
+		if(rcToChildActor.isEmpty() && runsToDo.size() == 0)
+		{
+			log.debug("We are done processing runs for {}", uuid);
+			context().stop(getSelf());
+			context().parent().tell(new AlgorithmRunBatchCompleted(uuid), getSelf());
+		}
+	}
 	
+	private void requestWorkers(boolean force)
+	{
+		if(runsToDo.size() > 0 || force)
+		{
+			log.debug("Requesting {} workers for UUID: {}", runsToDo.size(), uuid);
+			RequestWorkers rw = new RequestWorkers(priority, runsToDo.size() , uuid, getContext().parent());
+			this.coordinator.tell(rw, getContext().parent()); 
+		}
+	}
+	
+	private void dumpDebugInformation() {
+		StringBuilder sb = new StringBuilder();
+		sb.append("\t========[" + getClass().getSimpleName() + "]========\n");
+		sb.append("\t UUID: " + this.runRequests.getUUID() + "\n");
+		
+		sb.append("\t Queued Runs: " + this.runsToDo.size() + ", Started Actor Runs:" + this.rcToChildActor.size() + ", Total Runs Needed: " + this.runRequests.getAlgorithmRunConfigurations().size() + "\n");
+		sb.append("\t Completed Runs: " + this.completedRuns.size() + ",Priority:" + priority + ", Unstarted Runs To Kill: " + this.unstartedRunsToKill.size() + "\n");
+		
+		boolean halt = false;
+		if(this.runsToDo.size() + this.rcToChildActor.size() + this.completedRuns.size() != this.runRequests.getAlgorithmRunConfigurations().size())
+		{
+			sb.append("\t WARNING: Data structure corruption detected\n");
+			halt = true;
+		}
+		
+		int i=0;
+
+		for(ActorRef ent : this.getContext().getChildren())
+		{
+			i++;
+		}
+
+		sb.append("\t Number of Children: " + i);
+		
+		
+		System.out.println(sb);
+		System.out.flush();
+		
+		if(halt)
+		{
+			Runtime.getRuntime().halt(25);
+		}
+	}
+
+
 	public void postStop()
 	{
 		scheduledTask.cancel();
 	}
 
-	private static final class PollCoordinator implements Runnable
-	{
 
-		private final ActorRef sender;
-		private final ActorRef coordinator;
-		//private final RequestWorkers msg;
-		
-		private final AtomicInteger runsNeeded;
-		//private final ActorSystem system;
-		private final UUID uuid;
-		private double priority;
-		
-		private static final Logger log = LoggerFactory.getLogger(PollCoordinator.class);
-		
-		
-		public PollCoordinator(ActorRef sender, ActorRef coordinator,AtomicInteger runsNeeded, double priority, UUID uuid)
-		{
-			this.sender = sender;
-			this.coordinator = coordinator;
-			//this.msg = msg;
-			this.runsNeeded = runsNeeded;
-			this.uuid = uuid;
-			this.priority = priority;
-			//this.system = system;
-		}
-		@Override
-		public void run() {
-			
-			int runsNeeded = this.runsNeeded.get();
-			
-			if(runsNeeded > 0)
-			{
-				//log.debug("Requesting worker for UUID: {}", uuid);
-				RequestWorkers rw = new RequestWorkers(priority, runsNeeded , uuid, sender);
-				this.coordinator.tell(rw, sender); 
-			}
-		}
+	
+	private class Poll implements Serializable
+	{
 		
 	}
 

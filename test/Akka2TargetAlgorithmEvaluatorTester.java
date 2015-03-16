@@ -10,10 +10,15 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.*;
 import org.junit.Test;
+
+import com.google.common.util.concurrent.AtomicDouble;
 
 import ca.ubc.cs.beta.TestHelper;
 import ca.ubc.cs.beta.aeatk.algorithmexecutionconfiguration.AlgorithmExecutionConfiguration;
@@ -322,6 +327,19 @@ public class Akka2TargetAlgorithmEvaluatorTester {
 	 */
 	public void testFIFOBatchProcessing()
 	{
+		
+		ScheduledExecutorService execService = Executors.newScheduledThreadPool(1);
+		
+		execService.scheduleAtFixedRate(new Runnable(){
+
+			@Override
+			public void run() {
+				System.err.print(".");
+				System.err.flush();
+				
+			}
+			
+		}, 0, 250, TimeUnit.MILLISECONDS);
 		for(int i=0; i < 4; i++)
 		{
 			startWorker(i," --tae PARAMECHO --paramecho-simulate-cores 1");
@@ -331,7 +349,7 @@ public class Akka2TargetAlgorithmEvaluatorTester {
 		AkkaTargetAlgorithmEvaluatorOptions taeOptions = (AkkaTargetAlgorithmEvaluatorOptions) TargetAlgorithmEvaluatorLoader.getAvailableTargetAlgorithmEvaluators().get("AKKA");
 		
 		taeOptions.akkaClusterOptions.id = 100;
-		
+		taeOptions.observerFrequency = 2500;
 		TargetAlgorithmEvaluatorFactory akkaFactory = new AkkaTargetAlgorithmEvaluatorFactory();
 		TargetAlgorithmEvaluator tae = akkaFactory.getTargetAlgorithmEvaluator(taeOptions);
 		
@@ -347,13 +365,14 @@ public class Akka2TargetAlgorithmEvaluatorTester {
 		//System.out.println(tae.toString());
 		List<AlgorithmRunConfiguration> rcs = new ArrayList<>();
 		
-		for(int i=0; i < 12; i++)
+		for(int i=0; i < 100; i++)
 		{
 			ParameterConfiguration config = configSpace.getRandomParameterConfiguration(rand);
 			config.put("solved", "SAT");
 			config.put("seed",""+i);
-			config.put("runtime",String.valueOf((i%4)+1)); 
-			
+			//config.put("runtime",String.valueOf((i%4)/2+1)); 
+			//config.put("runtime",String.valueOf(2*i + ""));
+			config.put("runtime",String.valueOf(0.05+(i%5)));
 			AlgorithmRunConfiguration rc = new AlgorithmRunConfiguration(new ProblemInstanceSeedPair(new ProblemInstance("test"),i), 2000, config, execConfig);
 			
 			rcs.add(rc);
@@ -368,12 +387,12 @@ public class Akka2TargetAlgorithmEvaluatorTester {
 
 			@Override
 			public synchronized void currentStatus(List<? extends AlgorithmRunResult> runs) {
-				System.out.println("Observation:");
+				//System.out.println("Observation:");
 				for(AlgorithmRunResult run : runs)
 				{
 					ParameterConfiguration config = run.getAlgorithmRunConfiguration().getParameterConfiguration();
 					
-					System.out.println(config.getFormattedParameterString() + "=>" + run.getResultLine());
+					//System.out.println(config.getFormattedParameterString() + "=>" + run.getResultLine());
 					
 					run.kill();
 				}
@@ -381,6 +400,9 @@ public class Akka2TargetAlgorithmEvaluatorTester {
 			}
 			
 		};
+		
+		 final AtomicDouble runtime = new AtomicDouble();
+		
 		
 		TargetAlgorithmEvaluatorCallback cb = new TargetAlgorithmEvaluatorCallback()
 		{
@@ -393,6 +415,7 @@ public class Akka2TargetAlgorithmEvaluatorTester {
 					ParameterConfiguration config = run.getAlgorithmRunConfiguration().getParameterConfiguration();
 					
 					System.out.println(config.getFormattedParameterString() + "=>" + run.getResultLine());
+					runtime.addAndGet(run.getRuntime());
 				}
 				
 			}
@@ -404,18 +427,17 @@ public class Akka2TargetAlgorithmEvaluatorTester {
 			}
 			
 		};
-		for(int j=0; j < 10; j++)
+		for(int j=0; j < 15; j++)
 		{
-			for(int i=0; i < 3; i++)
-			{
-				tae.evaluateRunsAsync(rcs.subList(4*i, 4*i+4), cb,obs);
-			}
+			
+			tae.evaluateRunsAsync(rcs.subList(4*j, 4*j+4), cb,obs);
+			
 		}
 		StopWatch watch = new AutoStartStopWatch();
 		tae.waitForOutstandingEvaluations();
 		watch.stop();
 		
-		System.out.println("Processing all runs took: " + watch.time()/1000.0 + " seconds");
+		System.out.println("Processing all runs took: " + watch.time()/1000.0 + " seconds, reported: " + runtime.get() + " seconds");
 		
 	}
 	

@@ -71,4 +71,8 @@ public class RequestWorkers implements Serializable, Comparable<RequestWorkers>{
 		return requestor;
 	}
 	
+	public UUID getUUID()
+	{
+		return uuid;
+	}
 }

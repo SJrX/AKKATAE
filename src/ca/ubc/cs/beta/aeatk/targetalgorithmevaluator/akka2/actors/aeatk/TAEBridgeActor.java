@@ -1,12 +1,18 @@
 package ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.actors.aeatk;
 
 import java.io.Serializable;
+import java.lang.management.ManagementFactory;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -16,11 +22,14 @@ import org.slf4j.LoggerFactory;
 import scala.concurrent.duration.FiniteDuration;
 import ca.ubc.cs.beta.aeatk.algorithmrunconfiguration.AlgorithmRunConfiguration;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.messages.AllAlgorithmRunsDispatched;
+import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.messages.DumpDebugInformation;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.messages.RequestRunConfigurationUpdate;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.messages.UpdateObservationStatus;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.messages.AlgorithmRunBatchCompleted;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.messages.RequestRunBatch;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.messages.RequestWorkers;
+import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.messages.WorkerAvailable;
+import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.messages.WorkerPermit;
 import akka.actor.ActorRef;
 import akka.actor.Props;
 import akka.actor.UntypedActor;
@@ -42,8 +51,13 @@ public class TAEBridgeActor extends UntypedActor {
 	 */
 	public ArrayDeque<RequestRunBatch> nonStartedRequests = new ArrayDeque<>();
 	
-	public int activeAndWaitingJobs = 0; 
+	//public int activeAndWaitingJobs = 0; 
 	public int permittedActiveAndWaiting = 1; 
+	//public int active = 0;
+	
+	
+	public Set<UUID> activeUUIDs = new TreeSet<UUID>();
+	public Set<UUID> activeAndWaitingUUIDs = new TreeSet<UUID>();
 	
 	private final ActorRef coordinator;
 	
@@ -109,8 +123,10 @@ public class TAEBridgeActor extends UntypedActor {
 			 */
 			AlgorithmRunBatchCompleted arbc = (AlgorithmRunBatchCompleted) arg0;
 			
+			activeUUIDs.remove(arbc.getUUID());
 			this.requestsToManagingActorMap.remove(arbc.getUUID());
 			this.runsToKill.remove(arbc.getUUID());
+			
 		} else if(arg0 instanceof RequestRunConfigurationUpdate)
 		{
 			/**
@@ -157,8 +173,66 @@ public class TAEBridgeActor extends UntypedActor {
 			 * Tells us that we can potentially start the next batch, as a current batch no longer needs any workers
 			 * (Sent from managing actor) 
 			 */
-			activeAndWaitingJobs--;
+			activeAndWaitingUUIDs.remove(((AllAlgorithmRunsDispatched) arg0).getUUID());
 			startProcessingRunBatch(); 
+		} else if(arg0 instanceof WorkerPermit)
+		{
+		
+			
+			WorkerPermit wp = (WorkerPermit) arg0;
+			
+			
+			
+			
+			ActorRef child = requestsToManagingActorMap.get(wp.getUUID());
+			
+			if(child != null)
+			{
+				//Always tell the child if it's there
+				log.info("Recieved worker permit for {} and sending to child " , wp.getUUID());
+				child.tell(wp, getSender());
+			}
+			
+			
+			if(!activeAndWaitingUUIDs.contains(wp.getUUID()))
+			{
+				log.info("Child no longer active, assigning to someone else who may want it");
+				for(UUID uuid : activeAndWaitingUUIDs)
+				{
+					ActorRef waitingChild = requestsToManagingActorMap.get(uuid);
+					
+					log.info("Recieved worker permit for {} and telling {} " , wp.getUUID(), uuid);
+					waitingChild.tell(wp, getSender());
+				}
+			}
+			
+			
+			
+			
+			
+			
+			
+			
+			
+		}else if(arg0 instanceof DumpDebugInformation)
+		{
+			dumpDebugInformation();	
+			
+			Set<ActorRef> children = new HashSet<ActorRef>();
+			
+			for(ActorRef ar : getContext().getChildren())
+			{
+				children.add(ar);
+			}
+			
+			children.addAll(this.requestsToManagingActorMap.values());
+			
+			
+			for(ActorRef child: children)
+			{
+				child.tell(arg0, getSelf());
+			}
+				
 		} else 
 		{
 			unhandled(arg0);
@@ -169,13 +243,45 @@ public class TAEBridgeActor extends UntypedActor {
 
 
 
+	private void dumpDebugInformation() {
+		StringBuilder sb = new StringBuilder();
+		
+		sb.append("========[" + getClass().getSimpleName() + "]========\n");
+		sb.append(" Hostname:" + ManagementFactory.getRuntimeMXBean().getName() + "\n");
+		sb.append(" Active And Waiting: " + activeAndWaitingUUIDs.size() + ", Permitted Active And Waiting: " + permittedActiveAndWaiting + ", Active: " + activeUUIDs.size() + "\n");
+		sb.append(" Non Started Requests: " + nonStartedRequests.size() + "\n");
+		int i=0;
+		
+
+		
+		
+		
+		for(ActorRef ent : this.getContext().getChildren())
+		{
+			i++;
+		}
+		
+		sb.append(" Requests to Managing Actor Map Size: " + requestsToManagingActorMap.size() + ", Number of children: "+ i + "\n" );
+		
+		
+		for(UUID uuid : activeUUIDs)
+		{
+			sb.append(" UUID: " + uuid + " [Waiting: " + (activeAndWaitingUUIDs.contains(uuid) ? "Yes" : "No") + "]\n");
+		}
+		
+		if(!activeUUIDs.containsAll(activeAndWaitingUUIDs))
+		sb.append(" WARNING: datastructure corruption detected " + activeAndWaitingUUIDs + " should be a subset of " + activeUUIDs);
+		System.out.println(sb);
+		
+	}
+
 	/**
 	 * 
 	 */
 	public void startProcessingRunBatch() {
-		if(activeAndWaitingJobs < permittedActiveAndWaiting && nonStartedRequests.size() >= 1)
+		if(activeAndWaitingUUIDs.size() < permittedActiveAndWaiting && nonStartedRequests.size() >= 1)
 		{
-			activeAndWaitingJobs++;
+			
 			RequestRunBatch rrb = nonStartedRequests.pop();
 			
 			log.debug("Starting execution of batch : {}", rrb.getUUID());
@@ -184,6 +290,8 @@ public class TAEBridgeActor extends UntypedActor {
 			
 			this.requestsToManagingActorMap.put(rrb.getUUID(), delegate);
 			
+			this.activeUUIDs.add(rrb.getUUID());
+			this.activeAndWaitingUUIDs.add(rrb.getUUID());
 			if(this.runsToKill.get(rrb.getUUID()) != null)
 			{
 				log.debug("Sending previous kill messages");
@@ -207,9 +315,13 @@ public class TAEBridgeActor extends UntypedActor {
 		
 		private final UpdateObserverStatus message = new UpdateObserverStatus();
 
+		private final DumpDebugInformation debugInfo = new DumpDebugInformation();
+		private int i=0; 
 		@Override
 		public void run() {
 			TAEBridgeActor.this.getSelf().tell(message, getSelf());
+			
+			TAEBridgeActor.this.getSelf().tell(debugInfo, getSelf());
 		}
 		
 	}

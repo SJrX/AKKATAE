@@ -1,6 +1,7 @@
 package ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.messages;
 
 import java.io.Serializable;
+import java.util.UUID;
 
 import akka.actor.ActorRef;
 
@@ -13,13 +14,26 @@ public class WorkerPermit implements Serializable {
 	
 	private final ActorRef worker;
 	
-	public WorkerPermit(ActorRef worker)
+	private final UUID uuid;
+	
+	private final String name;
+	public WorkerPermit(ActorRef worker, UUID uuid, String name)
 	{
 		this.worker = worker;
+		this.uuid = uuid;
+		this.name = name;
 	}
 
 	public ActorRef getWorker() {
 		return worker;
 	}
 
+	public UUID getUUID()
+	{
+		return uuid;
+	}
+
+	public String getWorkerName() {
+		return name;
+	}
 }

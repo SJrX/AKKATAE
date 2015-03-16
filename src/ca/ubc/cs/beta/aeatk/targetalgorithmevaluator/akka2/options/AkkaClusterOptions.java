@@ -25,15 +25,15 @@ public class AkkaClusterOptions extends AbstractOptions{
 	 */
 	@UsageTextField(level = OptionLevel.DEVELOPER)
 	@Parameter(names="--akka-tae-gossip-interval", description="Gossip protocol interval in milliSeconds", validateWith=FixedPositiveInteger.class)
-	public int gossipInterval = 200;
+	public int gossipInterval = 1000;
 	
 	@UsageTextField(level = OptionLevel.DEVELOPER)
 	@Parameter(names="--akka-tae-leader-actions-interval", description="Leader actions interval", validateWith=FixedPositiveInteger.class)
-	public int leaderActionInterval = 200;
+	public int leaderActionInterval = 1000;
 	
 	@UsageTextField(level = OptionLevel.DEVELOPER)
 	@Parameter(names="--akka-tae-unreachable-nodes-reaper-interval", description="Unreachable Nodes Reaper Interval", validateWith=FixedPositiveInteger.class)
-	public int unreachableNodesReaperInterval = 500;
+	public int unreachableNodesReaperInterval = 1000;
 	
 	@UsageTextField(level = OptionLevel.DEVELOPER)
 	@Parameter(names="--akka-tae-periodic-tasks-initial-delay", description="Periodic Tasks Initial Delay", validateWith=FixedPositiveInteger.class)
@@ -41,7 +41,7 @@ public class AkkaClusterOptions extends AbstractOptions{
 	
 	@UsageTextField(level = OptionLevel.DEVELOPER)
 	@Parameter(names="--akka-tae-failure-detector-heartbeat-interval", description="Periodic Tasks Initial Delay", validateWith=FixedPositiveInteger.class)
-	public int  failureDetectorHeartbeatInterval = 500;
+	public int  failureDetectorHeartbeatInterval = 1000;
 	
 	@Parameter(names="--akka-tae-auto-down-unreachable-after", description="Auto down unreachable after (ms)", validateWith=FixedPositiveInteger.class)
 	public int autoDownUnreachableAfter = 10000;

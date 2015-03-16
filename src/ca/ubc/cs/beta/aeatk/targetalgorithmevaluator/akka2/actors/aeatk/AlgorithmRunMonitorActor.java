@@ -63,24 +63,15 @@ public class AlgorithmRunMonitorActor extends UntypedActor {
 	@Override
 	public void preStart()
 	{
+		worker.tell(new RequestRunConfigurationUpdate(rc,false, uuid), getSelf());
 		context().watch(worker);
-		/*
-		workerPollCancellable = context().system().scheduler().schedule(FiniteDuration.Zero(), FiniteDuration.create(observerFrequency, TimeUnit.MILLISECONDS), new Runnable()
-		{
-
-			@Override
-			public void run() {
-				worker.tell(new RequestRunConfigurationUpdate(rc, kill.get(), uuid), getSelf());
-			}
-		}, context().system().dispatcher());
-		*/
+		
 	}
 	
 	
 	public void postStop()
 	{
 		context().unwatch(worker);
-		//workerPollCancellable.cancel();
 	}
 	@Override
 	public void onReceive(Object arg0) throws Exception {

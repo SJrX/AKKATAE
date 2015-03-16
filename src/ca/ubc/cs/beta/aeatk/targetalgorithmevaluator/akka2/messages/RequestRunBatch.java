@@ -1,6 +1,7 @@
 package ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.messages;
 
 import java.io.Serializable;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
@@ -22,7 +23,7 @@ public class RequestRunBatch implements Serializable {
 	{
 		this.observerRef = observerRef;
 		this.completionRef = completionRef; 
-		this.runConfigurations = runsToRequest;
+		this.runConfigurations = Collections.unmodifiableList(runsToRequest);
 		this.uuid = uuid;
 	
 	}

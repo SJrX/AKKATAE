@@ -21,13 +21,15 @@ import akka.actor.UntypedActor;
 
 public class TAEWorkerCoordinator extends UntypedActor {
 
-	ArrayDeque<ActorRef> freeWorkers = new ArrayDeque<>();
+	ArrayDeque<WorkerAvailable> freeWorkers = new ArrayDeque<>();
 	
 	
 	
 	PriorityQueue<RequestWorkers> pQue = new PriorityQueue<RequestWorkers>();
 	
 	ConcurrentMap<RequestWorkers, AtomicInteger> workerRequests = new ConcurrentHashMap<>();
+	
+	ConcurrentMap<RequestWorkers, AtomicInteger> workerAssignments = new ConcurrentHashMap<>();
 	
 	private final Logger log = LoggerFactory.getLogger(getClass());
 	
@@ -48,18 +50,19 @@ public class TAEWorkerCoordinator extends UntypedActor {
 	
 		if(msg instanceof WorkerAvailable)
 		{
-			//log.warn("Worker Available");
+			
 			WorkerAvailable wa = (WorkerAvailable) msg;
 			
-			freeWorkers.add(wa.getWorkerActorRef());
+			log.warn("Worker Available: " + wa.getWorkerName());
+			freeWorkers.add(wa);
 			assignRunsIfPossible();
 		} else if (msg instanceof RequestWorkers)
 		{
-			//log.warn("Recieved request for worker");
+			
 			RequestWorkers rw = (RequestWorkers) msg;
-			
+			log.warn("Recieved request for worker from: " + rw.getUUID() + " needing: " + rw.getRequestCount());
 			AtomicInteger oldValue = workerRequests.putIfAbsent(rw, new AtomicInteger(rw.getRequestCount()));
-			
+			workerAssignments.putIfAbsent(rw,new AtomicInteger(0));
 			if(oldValue == null)
 			{
 				//log.info("Adding pQue");
@@ -68,24 +71,13 @@ public class TAEWorkerCoordinator extends UntypedActor {
 				//log.info("Old Value: {}", oldValue );
 			}
 			
-			int oldRequestCount = workerRequests.get(rw).get();
 			
 			int currentRequestCount = rw.getRequestCount();
-			
-			//We set it to the MAX of the current request or the previous request. 
-			
-			//This may lead us to assign more workers than necessary.
-			
-			
-			workerRequests.get(rw).set(Math.max(oldRequestCount, currentRequestCount));
-			//log.info("Request for worker recieved current workers needed: {}", workerRequests.get(rw).get());
-			
+			workerRequests.get(rw).set(currentRequestCount);
 			
 			assignRunsIfPossible();
 		} else if(msg instanceof WhereAreYou ) 
 		{
-			//System.out.println("Hello");
-			
 			getSender().tell(ManagementFactory.getRuntimeMXBean().getName(), getSelf());
 		} else
 		{
@@ -115,11 +107,12 @@ public class TAEWorkerCoordinator extends UntypedActor {
 				} else
 				{
 					
-					ActorRef worker = freeWorkers.poll();
+					WorkerAvailable wa = freeWorkers.poll();
+					
 					
 					int numberLeft = workerRequests.get(rw).decrementAndGet();
 					
-					WorkerPermit wp = new WorkerPermit(worker);
+					WorkerPermit wp = new WorkerPermit(wa.getWorkerActorRef(), rw.getUUID(), wa.getWorkerName());
 					
 					if(numberLeft <= 0)
 					{
@@ -128,6 +121,7 @@ public class TAEWorkerCoordinator extends UntypedActor {
 					}
 					
 					//log.warn("Sending worker permit");
+					log.warn("Assigning worker {} to: {}, thus far: {} ", wa.getWorkerName(), rw.getUUID(), workerAssignments.get(rw).incrementAndGet());
 					rw.getRequestor().tell(wp, this.getSender());
 					
 				}

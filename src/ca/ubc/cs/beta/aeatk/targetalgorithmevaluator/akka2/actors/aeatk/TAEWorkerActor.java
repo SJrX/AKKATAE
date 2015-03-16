@@ -1,5 +1,6 @@
 package ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.actors.aeatk;
 
+import java.lang.management.ManagementFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -68,7 +69,7 @@ public class TAEWorkerActor extends UntypedActor {
 	{
 		
 		pollCoordinator = new PollCoordinatorWithFreeWorker(doingWork, getSelf(), coordinator);
-		this.context().system().scheduler().schedule(new FiniteDuration(0, TimeUnit.SECONDS), new FiniteDuration(15, TimeUnit.SECONDS), pollCoordinator, this.context().system().dispatcher());
+		this.context().system().scheduler().schedule(new FiniteDuration(0, TimeUnit.SECONDS), new FiniteDuration(120, TimeUnit.SECONDS), pollCoordinator, this.context().system().dispatcher());
 	}
 	@Override
 	public void onReceive(Object arg0) throws Exception {
@@ -86,7 +87,7 @@ public class TAEWorkerActor extends UntypedActor {
 				currentRequest = rrcu;
 			
 				workerThreadInbox.tell(rrcu, getSelf());
-				//log.warn("Starting run for {}, seed: {} ", rrcu.getUUID() , rrcu.getAlgorithmRunConfiguration().getProblemInstanceSeedPair().getSeed());
+				log.warn("Starting run for {}, seed: {} ", rrcu.getUUID() , rrcu.getAlgorithmRunConfiguration().getProblemInstanceSeedPair().getSeed());
 				watchingActor = getSender();
 				latestStatus = new RunningAlgorithmRunResult(rrcu.getAlgorithmRunConfiguration(), 0, 0, 0, (long) 0, 0, null);
 				doingWork.set(true);
@@ -117,6 +118,7 @@ public class TAEWorkerActor extends UntypedActor {
 				
 			} else
 			{
+				log.warn("Rejected execution for:  {} ", ((RequestRunConfigurationUpdate) arg0).getUUID());
 				//log.warn("Rejected execution for {}, seed: {}",((RequestRunConfigurationUpdate) arg0).getUUID(), ((RequestRunConfigurationUpdate) arg0).getAlgorithmRunConfiguration().getProblemInstanceSeedPair().getSeed());
 				getSender().tell(new RejectedExecution(((RequestRunConfigurationUpdate) arg0).getAlgorithmRunConfiguration()), getSelf());
 			}
@@ -124,16 +126,17 @@ public class TAEWorkerActor extends UntypedActor {
 		{
 			
 		
-			doingWork.set(false);
+		
 			latestStatus = ((AlgorithmRunStatus) arg0).getAlgorithmRunResult();
 			
 			
 			if(latestStatus.isRunCompleted())
 			{
+				doingWork.set(false);
 				pollCoordinator.run();
 				completedRequests.put(currentRequest, latestStatus);
 				currentRequest = null;
-				//log.warn("Worker done request");
+				log.warn("Worker done request, marking available");
 			}
 			
 			if(numberOfAdditionalNotificationsLeft-- > 0)
@@ -157,12 +160,13 @@ public class TAEWorkerActor extends UntypedActor {
 		private final ActorRef coordinator;
 		private final WorkerAvailable wa;
 		
+		private final Logger log = LoggerFactory.getLogger(getClass());
 		public PollCoordinatorWithFreeWorker(AtomicBoolean doingWork, ActorRef sender, ActorRef coordinator)
 		{
 			this.doingWork = doingWork;
 			this.sender = sender;
 			this.coordinator = coordinator;
-			this.wa = new WorkerAvailable(sender);
+			this.wa = new WorkerAvailable(sender, ManagementFactory.getRuntimeMXBean().getName());
 		}
 		
 		@Override
@@ -170,7 +174,10 @@ public class TAEWorkerActor extends UntypedActor {
 		{
 			if(!this.doingWork.get())
 			{
+				
+				
 				this.coordinator.tell(wa, sender);
+				log.warn("Notifying that worker is available: {}", wa.getWorkerName());
 			}
 		}
 	}

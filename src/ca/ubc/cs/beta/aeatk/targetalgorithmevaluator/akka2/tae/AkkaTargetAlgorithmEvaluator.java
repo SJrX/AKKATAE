@@ -190,6 +190,32 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 		
 		ActorRef coordinator = system.actorOf(ClusterSingletonProxy.defaultProps("/user/singleton/coordinator",null),"coordinatoryProxy");
 		
+		Inbox singletonWaiting = Inbox.create(system);
+		
+		while(true)
+		{
+			log.debug("Waiting for worker coordinator to come online");
+			try 
+			{
+				singletonWaiting.send(coordinator, new WhereAreYou());
+				singletonWaiting.receive(new FiniteDuration(10, TimeUnit.SECONDS));
+				
+				if(true)
+				{
+					break;
+				} else
+				{
+					throw new TimeoutException();
+				}
+				
+			} catch(TimeoutException e)
+			{
+				
+				//Doesn't matter
+			}	
+		} 
+		
+		
 		
 		masterTAE = system.actorOf(Props.create(TAEBridgeActor.class,coordinator, opts.observerFrequency), "masterTAE");
 		
@@ -260,30 +286,7 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 		
 		
 		
-		Inbox singletonWaiting = Inbox.create(system);
 		
-		while(true)
-		{
-			log.debug("Waiting for worker coordinator to come online");
-			try 
-			{
-				singletonWaiting.send(coordinator, new WhereAreYou());
-				singletonWaiting.receive(new FiniteDuration(10, TimeUnit.SECONDS));
-				
-				if(true)
-				{
-					break;
-				} else
-				{
-					throw new TimeoutException();
-				}
-				
-			} catch(TimeoutException e)
-			{
-				
-				//Doesn't matter
-			}	
-		} 
 		
 		log.debug("AKKA Target Algorithm Started");
 		
@@ -308,40 +311,44 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 		}
 		
 		UUID uuid = UUID.randomUUID();
-		CallerContext ctx = new CallerContext(runConfigs, taeCallback, runStatusObserver);
-		uuidToCallerContextMap.put(uuid, ctx);
-		uuidToOutstandingRunConfigsSet.put(uuid, Collections.newSetFromMap(new ConcurrentHashMap<AlgorithmRunConfiguration, Boolean>()));
-		
-		ConcurrentHashMap<AlgorithmRunConfiguration, AlgorithmRunResult> observerMap = new ConcurrentHashMap<AlgorithmRunConfiguration, AlgorithmRunResult>();
-		uuidToObserverRunResultMap.put(uuid, observerMap);
-		
-		List<AlgorithmRunResult> results = new ArrayList<>();
-		
-		for(AlgorithmRunConfiguration runConfig : runConfigs)
+		//synchronized(uuid)
 		{
-			AlgorithmRunResult result = new RunningAlgorithmRunResult(runConfig, 0, 0, 0, 0, 0, ctx.getKillHandler(runConfig));
-			observerMap.put(runConfig,result);
-			results.add(result);
-		}
-		
-		if(runStatusObserver != null)
-		{
-			runStatusObserver.currentStatus(results);
-		}
-		
-		this.lastObserverNotificationTime.put(uuid, new AtomicLong(System.currentTimeMillis()));
-		
-		uuidToOutstandingRunConfigsSet.get(uuid).addAll(runConfigs);
+			CallerContext ctx = new CallerContext(runConfigs, taeCallback, runStatusObserver);
+			uuidToCallerContextMap.put(uuid, ctx);
+			uuidToOutstandingRunConfigsSet.put(uuid, Collections.newSetFromMap(new ConcurrentHashMap<AlgorithmRunConfiguration, Boolean>()));
+			
+			ConcurrentHashMap<AlgorithmRunConfiguration, AlgorithmRunResult> observerMap = new ConcurrentHashMap<AlgorithmRunConfiguration, AlgorithmRunResult>();
+			uuidToObserverRunResultMap.put(uuid, observerMap);
+			
+			List<AlgorithmRunResult> results = new ArrayList<>();
+			
+			for(AlgorithmRunConfiguration runConfig : runConfigs)
+			{
+				AlgorithmRunResult result = new RunningAlgorithmRunResult(runConfig, 0, 0, 0, 0, 0, ctx.getKillHandler(runConfig));
+				observerMap.put(runConfig,result);
+				results.add(result);
+			}
+			
+			if(runStatusObserver != null)
+			{
+				runStatusObserver.currentStatus(results);
+			}
+			
+			this.lastObserverNotificationTime.put(uuid, new AtomicLong(System.currentTimeMillis()));
+			
+			uuidToOutstandingRunConfigsSet.get(uuid).addAll(runConfigs);
 
-		uuidToCompletedRunResults.put(uuid, new ConcurrentHashMap<AlgorithmRunConfiguration, AlgorithmRunResult>());
+			uuidToCompletedRunResults.put(uuid, new ConcurrentHashMap<AlgorithmRunConfiguration, AlgorithmRunResult>());
+			
+			
+			
+			//log.debug("Submitting run batch: {}" , uuid);
+			
+			RequestRunBatch rrb = new RequestRunBatch(observerInbox.getRef(), completionInbox.getRef(), runConfigs, uuid);
+			
+			completionInbox.send(masterTAE, rrb);
+		}
 		
-		
-		
-		//log.debug("Submitting run batch: {}" , uuid);
-		
-		RequestRunBatch rrb = new RequestRunBatch(observerInbox.getRef(), completionInbox.getRef(), runConfigs, uuid);
-		
-		completionInbox.send(masterTAE, rrb);
 		
 		
 		
@@ -528,21 +535,25 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 							
 							if(outstandingRunConfigurations != null)
 							{
-								outstandingRunConfigurations.remove(ars.getAlgorithmRunResult().getAlgorithmRunConfiguration());
-								
-								uuidToCompletedRunResults.get(uuid).put(ars.getAlgorithmRunResult().getAlgorithmRunConfiguration(),ars.getAlgorithmRunResult());
-								uuidToObserverRunResultMap.get(uuid).put(ars.getAlgorithmRunResult().getAlgorithmRunConfiguration(),ars.getAlgorithmRunResult());
-								
-								
-								if(outstandingRunConfigurations.size() == 0)
+								if(outstandingRunConfigurations.remove(ars.getAlgorithmRunResult().getAlgorithmRunConfiguration()))
 								{
-									//log.info("Notifying callback");
-									uuidToOutstandingRunConfigsSet.remove(uuid);
-									callbacksToFire.add(uuid);
+									
+									uuidToCompletedRunResults.get(uuid).put(ars.getAlgorithmRunResult().getAlgorithmRunConfiguration(),ars.getAlgorithmRunResult());
+									uuidToObserverRunResultMap.get(uuid).put(ars.getAlgorithmRunResult().getAlgorithmRunConfiguration(),ars.getAlgorithmRunResult());
+									
+									
+									if(outstandingRunConfigurations.size() == 0)
+									{
+										//log.info("Notifying callback");
+										callbacksToFire.add(uuid);
+									} else
+									{
+										observerToFire.add(uuid);
+										log.trace("CHP Left: {}, {}", outstandingRunConfigurations.size(), ars.getAlgorithmRunResult());
+									}
 								} else
 								{
-									observerToFire.add(uuid);
-									log.trace("CHP Left: {}, {}", outstandingRunConfigurations.size(), ars.getAlgorithmRunResult());
+									//It's a duplicate message and drop
 								}
 							}
 						}
@@ -634,6 +645,7 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 							uuidToOutstandingRunConfigsSet.remove(uuid);
 							uuidToObserverRunResultMap.remove(uuid);
 							lastObserverNotificationTime.remove(uuid);
+							System.err.println("Firing callback for: " + uuid);
 						}
 					}
 					
@@ -686,11 +698,24 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 						
 						AlgorithmRunResult resultToAdd =uuidToObserverRunResultMap.get(uuid).get(runConfig);
 						
-						if(!uuidToOutstandingRunConfigsSet.get(uuid).contains(runConfig))
-						{ //The run is done, and further more by this point, we have a completed run
-							resultToAdd = uuidToCompletedRunResults.get(uuid).get(runConfig);
-						}
+						try 
+						{
+							if(!uuidToOutstandingRunConfigsSet.get(uuid).contains(runConfig))
+							{ //The run is done, and further more by this point, we have a completed run
+								resultToAdd = uuidToCompletedRunResults.get(uuid).get(runConfig);
+							}
 						
+						} catch(NullPointerException e)
+						{
+							e.printStackTrace();
+							System.err.println(uuid);
+							System.err.println(uuidToOutstandingRunConfigsSet);
+							System.err.println(uuidToOutstandingRunConfigsSet.get(uuid));
+							System.err.println(runConfig);
+							
+							
+							Runtime.getRuntime().exit(1);
+						}
 						runResult.add(resultToAdd);
 					}
 					
