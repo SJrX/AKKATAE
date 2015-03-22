@@ -17,6 +17,7 @@ import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.messages.KillLocalRun
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.messages.RejectedExecution;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.messages.RequestRunConfigurationUpdate;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.messages.WorkerAvailable;
+import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.options.AkkaWorkerOptions;
 import akka.actor.ActorRef;
 import akka.actor.UntypedActor;
 
@@ -50,18 +51,22 @@ public class TAEWorkerActor extends UntypedActor {
 	private final Logger log = LoggerFactory.getLogger(getClass());
 	
 	
-	private final int NUMBER_OF_ADDITIONAL_NOTIFICATIONS = 3; //Maybe make this an option one day lol, I don't that will happen.
+	private final int NUMBER_OF_ADDITIONAL_NOTIFICATIONS; //Maybe make this an option one day lol, I don't that will happen.
 	//
 	/**
 	 * We will notify the owner an additional number of times if this is set.
 	 */
 	private int numberOfAdditionalNotificationsLeft = 0;
+
+	private AkkaWorkerOptions opts;
 	
-	public TAEWorkerActor(ActorRef workerThreadInbox, ActorRef observerThreadInbox, ActorRef coordinator)
+	public TAEWorkerActor(ActorRef workerThreadInbox, ActorRef observerThreadInbox, ActorRef coordinator, AkkaWorkerOptions opts)
 	{
 		this.workerThreadInbox = workerThreadInbox;
 		this.observerThreadInbox = observerThreadInbox;
 		this.coordinator = coordinator;
+		this.opts = opts;
+		this.NUMBER_OF_ADDITIONAL_NOTIFICATIONS = opts.additionalNotifications;
 	}
 	
 	@Override
@@ -69,7 +74,7 @@ public class TAEWorkerActor extends UntypedActor {
 	{
 		
 		pollCoordinator = new PollCoordinatorWithFreeWorker(doingWork, getSelf(), coordinator);
-		this.context().system().scheduler().schedule(new FiniteDuration(0, TimeUnit.SECONDS), new FiniteDuration(120, TimeUnit.SECONDS), pollCoordinator, this.context().system().dispatcher());
+		this.context().system().scheduler().schedule(new FiniteDuration(0, TimeUnit.SECONDS), new FiniteDuration(opts.workerPollAvailability, TimeUnit.SECONDS), pollCoordinator, this.context().system().dispatcher());
 	}
 	@Override
 	public void onReceive(Object arg0) throws Exception {

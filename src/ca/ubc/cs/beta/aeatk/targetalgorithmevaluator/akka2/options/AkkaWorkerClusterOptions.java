@@ -42,7 +42,7 @@ public class AkkaWorkerClusterOptions extends AbstractOptions{
 	public int  failureDetectorHeartbeatInterval = 500;
 
 	@Parameter(names="--akka-worker-auto-down-unreachable-after", description="Auto down unreachable after (ms)", validateWith=FixedPositiveInteger.class)
-	public int autoDownUnreachableAfter = 10000;
+	public int autoDownUnreachableAfter = 60000;
 	
 	
 	

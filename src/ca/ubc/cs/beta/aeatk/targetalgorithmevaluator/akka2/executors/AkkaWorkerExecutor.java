@@ -21,6 +21,7 @@ import akka.actor.ActorRef;
 import akka.actor.ActorSystem;
 import akka.actor.Inbox;
 import akka.actor.Props;
+import akka.cluster.Cluster;
 import akka.contrib.pattern.ClusterSingletonManager;
 import akka.contrib.pattern.ClusterSingletonProxy;
 
@@ -135,18 +136,22 @@ public class AkkaWorkerExecutor {
 			 			//ActorRef singleton = system.actorOf(ClusterSingletonManager.defaultProps(Props.create(TAEWorkerCoordinator.class), "coordinator", "END", null),"singleton");
 			ActorRef singletonProxyManager = system.actorOf(ClusterSingletonManager.defaultProps(Props.create(TAEWorkerCoordinator.class), "coordinator", "END", null),"singleton");
 			
+
+			
+			
+			
 			Inbox workerThread = Inbox.create(system);
 			final Inbox observerThread = Inbox.create(system);
 			
 			
-		
+			
 			 
 			
 			ActorRef clusterNode = system.actorOf(Props.create(ClusterManagerActor.class), "clusterManager");
 			
 			ActorRef singleton = system.actorOf(ClusterSingletonProxy.defaultProps("/user/singleton/coordinator",null),"coordinatoryProxy");
 			
-			final ActorRef backend = system.actorOf(Props.create(TAEWorkerActor.class, workerThread.getRef(), observerThread.getRef(),singleton), "frontend");
+			final ActorRef backend = system.actorOf(Props.create(TAEWorkerActor.class, workerThread.getRef(), observerThread.getRef(),singleton, opts), "frontend");
 		
 			Inbox inbox = Inbox.create(system);
 			
