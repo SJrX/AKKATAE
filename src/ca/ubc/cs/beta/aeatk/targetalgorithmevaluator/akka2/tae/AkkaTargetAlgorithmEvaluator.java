@@ -48,6 +48,7 @@ import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.master.MasterWatchDogA
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.actors.aeatk.TAEBridgeActor;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.actors.aeatk.TAEWorkerCoordinator;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.actors.cluster.ClusterManagerActor;
+import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.helper.AkkaHelper;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.messages.AlgorithmRunStatus;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.messages.RequestRunBatch;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.messages.RequestRunConfigurationUpdate;
@@ -146,19 +147,9 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 				"  }\n" + 
 				"  remote {\n" + 
 				"    log-remote-lifecycle-events = off\n" + 
-				"    netty.tcp {\n" + 
-				"      hostname = \"127.0.0.1\"\n" + 
-				"      port = 0\n" + 
-				"    }\n" + 
 				"  }\n" + 
 				"\n" + 
-				"  cluster {\n" + 
-				"    seed-nodes = [\n" + 
-				"      \"akka.tcp://ClusterSystem@127.0.0.1:61001\"]\n" + 
-				//,\n" + 
-				//"      \"akka.tcp://ClusterSystem@127.0.0.1:61001\"]\n" + 
-				"\n" + 
-		 
+				"  cluster {\n" + 		 
 				"    auto-down-unreachable-after = 10s\n" + 
 				"	  jmx.enabled = " + (opts.akkaClusterOptions.jmxEnabled ? "on" : "off") + "\n"+ 
 				"	  gossip-interval = "+opts.akkaClusterOptions.gossipInterval + " ms\n"+
@@ -174,12 +165,15 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 			
 			
 			
+		/**
 			
 		final Config config = ConfigFactory.parseString("akka.remote.netty.tcp.port=" + (opts.akkaClusterOptions.id + 61000)).
 			      withFallback(ConfigFactory.parseString(configuration));
 			      
 		system = ActorSystem.create("ClusterSystem", config);
+		*/
 		
+		system = AkkaHelper.startAkkaSystem(opts.akkaClusterOptions.networks, opts.dir, configuration, opts.akkaClusterOptions.id);
 		this.opts = opts;
 		
 		

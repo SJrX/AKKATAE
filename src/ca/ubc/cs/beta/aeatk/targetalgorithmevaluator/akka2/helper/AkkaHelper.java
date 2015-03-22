@@ -34,6 +34,7 @@ import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.beust.jcommander.ParameterException;
 import com.typesafe.config.Config;
 import com.typesafe.config.ConfigFactory;
 
@@ -65,7 +66,7 @@ public class AkkaHelper {
 7) When shutting down the actor system delete the file akka.N+1. (also happens in step 5 and step 6)
 
 	 */
-	public static ActorSystem startAkkaSystem(String networkInterfacePriority, File directory, String configuration)
+	public static ActorSystem startAkkaSystem(String networkInterfacePriority, File directory, String configuration, Integer setID)
 	{
 	
 		UUID uuid = UUID.randomUUID();
@@ -95,11 +96,19 @@ attemptLoop:
 				
 				File targetFile;
 				
-				int idInt = getStartingID(directory);
+				String id;
+				if(setID == null)
+				{
+					int idInt = getStartingID(directory);
+					
+					
+					//Ensures that for the first million nodes, the string order is the same as numeric order (otherwise a string foo-2 comes after foo-12).
+					id=String.format("%06d", idInt);
+				} else
+				{
+					id=String.format("%06d", setID);
+				}
 				
-				
-				//Ensures that for the first million nodes, the string order is the same as numeric order (otherwise a string foo-2 comes after foo-12).
-				String id=String.format("%06d", idInt);
 				f = new File(directory + File.separator + "akka-attempt-" + uuid + "-" + AKKA_AUTO_NEGIOTATE_ID_FILENAME + id );
 				
 				f.createNewFile();
@@ -129,20 +138,23 @@ attemptLoop:
 					{
 						log.warn("Couldn't create symbolic link {}. This may be because it already existed, in which case this error is benign, we will retry a number of times before giving up. If things look suspicious please contact the developer and tell them : Exception : {} , Message: {} ", targetFile.getAbsolutePath() , e.getClass().getCanonicalName(), e.getMessage());
 						
+					} else
+					{
+						if(setID != null)
+						{
+							throw new ParameterException("File "+ directory + File.separator + AKKA_AUTO_NEGIOTATE_ID_FILENAME + id  + " was already in use, each individual node needs to have a unique ID");
+						}
 					}
+					
+					
 					 
+					
 					
 					try 
 					{
-						if(idInt <= 2)
-						{
-							//If we are one of the early runs we will back off for longer
-							Thread.sleep((long) (2000 + rand.nextDouble() * 1500));
-						} else
-						{
-							//Later ones shouldn't matter
-							Thread.sleep((long) (rand.nextDouble() * 1500));
-						}
+
+						Thread.sleep((long) ((rand.nextDouble() * 1500) + 500));
+						
 						
 						continue attemptLoop;
 					} catch(InterruptedException e2)

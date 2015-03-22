@@ -41,12 +41,16 @@ import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.TargetAlgorithmEvaluatorRun
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.actors.aeatk.TAEWorkerCoordinator;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.actors.aeatk.TAEWorkerActor;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.actors.cluster.ClusterManagerActor;
+import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.helper.AkkaHelper;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.messages.AlgorithmRunStatus;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.messages.KillLocalRun;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.messages.RequestRunConfigurationUpdate;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.messages.WhereAreYou;
+import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.options.AkkaClusterOptions;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.options.AkkaWorkerOptions;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.tae.AkkaTargetAlgorithmEvaluator;
+import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.tae.AkkaTargetAlgorithmEvaluatorFactory;
+import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.tae.AkkaTargetAlgorithmEvaluatorOptions;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.exceptions.TargetAlgorithmAbortException;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.init.TargetAlgorithmEvaluatorBuilder;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.init.TargetAlgorithmEvaluatorLoader;
@@ -82,9 +86,9 @@ public class AkkaWorkerExecutor {
 			
 			
 			
-				
-		
 			
+		
+			AkkaClusterOptions akkaClustOptions = ((AkkaTargetAlgorithmEvaluatorOptions)taeOpts.get(AkkaTargetAlgorithmEvaluatorFactory.getTAEName())).akkaClusterOptions;
 				
 			String configuration ="akka {\n" + 
 					"  loglevel = \"WARNING\"\n" +
@@ -93,37 +97,23 @@ public class AkkaWorkerExecutor {
 					"  }\n" + 
 					"  remote {\n" + 
 					"    log-remote-lifecycle-events = off\n" + 
-					"    netty.tcp {\n" + 
-					"      hostname = \"127.0.0.1\"\n" + 
-					"      port = 0\n" + 
-					"    }\n" + 
 					"  }\n" + 
 					"\n" + 
-					"  cluster {\n" + 
-					"    seed-nodes = [\n" + 
-					"      \"akka.tcp://ClusterSystem@127.0.0.1:61001\"]\n" + 
-					//,\n" + 
-					//"      \"akka.tcp://ClusterSystem@127.0.0.1:61001\"]\n" + 
-					"\n" + 
+					"  cluster {\n" +  
 					"    auto-down-unreachable-after = 10s\n" + 
-					"	  jmx.enabled = " + (opts.clustOpts.jmxEnabled ? "on" : "off") + "\n"+ 
-					"	  gossip-interval = "+opts.clustOpts.gossipInterval + " ms\n"+
-					"	  leader-actions-interval = "+ opts.clustOpts.leaderActionInterval+" ms\n"+
-					"	  unreachable-nodes-reaper-interval = " +opts.clustOpts.unreachableNodesReaperInterval+" ms\n"+
-					"	  periodic-tasks-initial-delay = "+ opts.clustOpts.periodicTasksInitialDelay + " ms\n"+
-					"	  failure-detector.heartbeat-interval = "+opts.clustOpts.failureDetectorHeartbeatInterval+" ms\n"+
-					"     auto-down-unreachable-after = " +opts.clustOpts.autoDownUnreachableAfter+ " ms\n" + 
+					"	  jmx.enabled = " + (akkaClustOptions.jmxEnabled ? "on" : "off") + "\n"+ 
+					"	  gossip-interval = "+akkaClustOptions.gossipInterval + " ms\n"+
+					"	  leader-actions-interval = "+ akkaClustOptions.leaderActionInterval+" ms\n"+
+					"	  unreachable-nodes-reaper-interval = " +akkaClustOptions.unreachableNodesReaperInterval+" ms\n"+
+					"	  periodic-tasks-initial-delay = "+ akkaClustOptions.periodicTasksInitialDelay + " ms\n"+
+					"	  failure-detector.heartbeat-interval = "+akkaClustOptions.failureDetectorHeartbeatInterval+" ms\n"+
+					"     auto-down-unreachable-after = " +akkaClustOptions.autoDownUnreachableAfter+ " ms\n" + 
 					"  }\n" + 
 					"}\n";
 				
 				
-				
-				
-				
-			final Config config = ConfigFactory.parseString("akka.remote.netty.tcp.port=" + (opts.clustOpts.id + 61000)).
-				      withFallback(ConfigFactory.parseString(configuration));
-				      
-			ActorSystem system = ActorSystem.create("ClusterSystem", config);
+			ActorSystem system = AkkaHelper.startAkkaSystem(akkaClustOptions.networks, opts.dir, configuration, akkaClustOptions.id);	
+			
 			ExecutorService execService = Executors.newSingleThreadExecutor(new SequentiallyNamedThreadFactory("Observer Inbox Monitor", true));
 			
 			

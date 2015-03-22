@@ -11,11 +11,12 @@ import ca.ubc.cs.beta.aeatk.options.AbstractOptions;
 @UsageTextField(hiddenSection=true)
 public class AkkaClusterOptions extends AbstractOptions{
 
-	@Parameter(names="--akka-tae-id", description="ID of the akka worker", required=false)
+	@Parameter(names="--akka-id", description="ID of the akka worker, if not set we will auto negiotate this with other workers. If you explicitly set this make sure there are no collisions", required=false)
 	public Integer id;
 	
+	@Parameter(names="--akka-network", description="Comma seperated list of networks to prefer (e.g. 24.85., 10.52.213, 127.0.). Networks are matched by string prefix matching. ")
+	public String networks = "127.0.0.1";
 	
-
 	@UsageTextField(level = OptionLevel.DEVELOPER)
 	@Parameter(names="--akka-tae-jmx-enabled", description="Whether JMX should be enabled")
 	public boolean jmxEnabled = false;

@@ -13,7 +13,7 @@ public class AkkaHelperTester {
 
 	public static void main(String[] args) throws IOException
 	{
-		
+		/*
 		final AkkaWorkerOptions opts = new AkkaWorkerOptions();
 		
 		final String configuration ="akka {\n" + 
@@ -77,7 +77,7 @@ public class AkkaHelperTester {
 			execService.execute(run);
 		}
 		
-		
+		*/
 		
 	}
 }

@@ -16,8 +16,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.*;
-import org.junit.Test;
 
+import com.google.common.io.Files;
 import com.google.common.util.concurrent.AtomicDouble;
 
 import ca.ubc.cs.beta.TestHelper;
@@ -60,7 +60,8 @@ public class Akka2TargetAlgorithmEvaluatorTester {
 	public Process startWorker(final int id, String args)
 	{
 		
-		String fullWorkerCall = "java -cp " +  System.getProperty("java.class.path") + " " + AkkaWorkerExecutor.class.getCanonicalName() + " --akka-worker-id " + id + " " + args;
+		//" --akka-worker-id " + id
+		String fullWorkerCall = "java -cp " +  System.getProperty("java.class.path") + " " + AkkaWorkerExecutor.class.getCanonicalName()  + " " + args;
 		
 
 		ProcessBuilder pb = new ProcessBuilder();
@@ -328,6 +329,10 @@ public class Akka2TargetAlgorithmEvaluatorTester {
 	public void testFIFOBatchProcessing()
 	{
 		
+		
+		
+		File tmpDir = Files.createTempDir();
+		
 		ScheduledExecutorService execService = Executors.newScheduledThreadPool(1);
 		
 		execService.scheduleAtFixedRate(new Runnable(){
@@ -342,13 +347,13 @@ public class Akka2TargetAlgorithmEvaluatorTester {
 		}, 0, 250, TimeUnit.MILLISECONDS);
 		for(int i=0; i < 4; i++)
 		{
-			startWorker(i," --tae PARAMECHO --paramecho-simulate-cores 1");
+			startWorker(i," --tae PARAMECHO --paramecho-simulate-cores 1 " + " --akka-worker-dir " + tmpDir.getAbsolutePath());
 		//startWorker(2," --tae PARAMECHO");
 		}
 		//AkkaTargetAlgorithmEvaluatorFactory taeFactory = 
 		AkkaTargetAlgorithmEvaluatorOptions taeOptions = (AkkaTargetAlgorithmEvaluatorOptions) TargetAlgorithmEvaluatorLoader.getAvailableTargetAlgorithmEvaluators().get("AKKA");
 		
-		taeOptions.akkaClusterOptions.id = 100;
+		taeOptions.dir = tmpDir;
 		taeOptions.observerFrequency = 2500;
 		TargetAlgorithmEvaluatorFactory akkaFactory = new AkkaTargetAlgorithmEvaluatorFactory();
 		TargetAlgorithmEvaluator tae = akkaFactory.getTargetAlgorithmEvaluator(taeOptions);
@@ -440,6 +445,277 @@ public class Akka2TargetAlgorithmEvaluatorTester {
 		System.out.println("Processing all runs took: " + watch.time()/1000.0 + " seconds, reported: " + runtime.get() + " seconds");
 		
 	}
+	
+	
+	@Test
+	/**
+	 * This tests that runs are processed in FIFO order. 
+	 */
+	public void testStrictOrder()
+	{
+		
+		
+		ScheduledExecutorService execService = Executors.newScheduledThreadPool(1);
+		
+		execService.scheduleAtFixedRate(new Runnable(){
+
+			@Override
+			public void run() {
+				System.err.print(".");
+				System.err.flush();
+				
+			}
+			
+		}, 0, 250, TimeUnit.MILLISECONDS);
+		
+		File tmpDir = Files.createTempDir();
+		
+		for(int i=0; i < 4; i++)
+		{
+			startWorker(i," --tae PARAMECHO --paramecho-simulate-cores 1 --akka-id " + i + " --akka-worker-dir " + tmpDir.getAbsolutePath());
+		//startWorker(2," --tae PARAMECHO");
+		}
+		
+		try {
+			Thread.sleep(1000);
+		} catch (InterruptedException e1) {
+			Thread.currentThread().interrupt();
+		}
+		
+		
+		//AkkaTargetAlgorithmEvaluatorFactory taeFactory = 
+		AkkaTargetAlgorithmEvaluatorOptions taeOptions = (AkkaTargetAlgorithmEvaluatorOptions) TargetAlgorithmEvaluatorLoader.getAvailableTargetAlgorithmEvaluators().get("AKKA");
+		
+		
+		taeOptions.akkaClusterOptions.id = 100;
+		taeOptions.observerFrequency = 2500;
+		taeOptions.dir = tmpDir;
+		TargetAlgorithmEvaluatorFactory akkaFactory = new AkkaTargetAlgorithmEvaluatorFactory();
+		TargetAlgorithmEvaluator tae = akkaFactory.getTargetAlgorithmEvaluator(taeOptions);
+		
+		tae = new OutstandingEvaluationsTargetAlgorithmEvaluatorDecorator(tae);
+		/*
+		akkaFactory = new EchoTargetAlgorithmEvaluatorFactory();
+		EchoTargetAlgorithmEvaluatorOptions opts = (EchoTargetAlgorithmEvaluatorOptions) akkaFactory.getOptionObject();
+		
+		opts.cores = 1;
+		
+		tae = akkaFactory.getTargetAlgorithmEvaluator(opts);
+		*/
+		//System.out.println(tae.toString());
+		List<AlgorithmRunConfiguration> rcs = new ArrayList<>();
+		
+		for(int i=0; i < 100; i++)
+		{
+			ParameterConfiguration config = configSpace.getRandomParameterConfiguration(rand);
+			config.put("solved", "SAT");
+			config.put("seed",""+i);
+			//config.put("runtime",String.valueOf((i%4)/2+1)); 
+			//config.put("runtime",String.valueOf(2*i + ""));
+			config.put("runtime",String.valueOf(0.05+(i%5)));
+			AlgorithmRunConfiguration rc = new AlgorithmRunConfiguration(new ProblemInstanceSeedPair(new ProblemInstance("test"),i), 2000, config, execConfig);
+			
+			rcs.add(rc);
+		}
+		
+		//Collections.shuffle(rcs, new Random(25));
+
+	
+		
+		TargetAlgorithmEvaluatorRunObserver obs = new TargetAlgorithmEvaluatorRunObserver()
+		{
+
+			@Override
+			public synchronized void currentStatus(List<? extends AlgorithmRunResult> runs) {
+				//System.out.println("Observation:");
+				for(AlgorithmRunResult run : runs)
+				{
+					ParameterConfiguration config = run.getAlgorithmRunConfiguration().getParameterConfiguration();
+					
+					//System.out.println(config.getFormattedParameterString() + "=>" + run.getResultLine());
+					
+					run.kill();
+				}
+
+			}
+			
+		};
+		
+		 final AtomicDouble runtime = new AtomicDouble();
+		
+		
+		TargetAlgorithmEvaluatorCallback cb = new TargetAlgorithmEvaluatorCallback()
+		{
+
+			@Override
+			public synchronized void onSuccess(List<AlgorithmRunResult> runs) {
+				System.out.println("Results:");
+				for(AlgorithmRunResult run : runs)
+				{
+					ParameterConfiguration config = run.getAlgorithmRunConfiguration().getParameterConfiguration();
+					
+					System.out.println(config.getFormattedParameterString() + "=>" + run.getResultLine());
+					runtime.addAndGet(run.getRuntime());
+				}
+				
+			}
+
+			@Override
+			public void onFailure(RuntimeException e) {
+				e.printStackTrace();
+				
+			}
+			
+		};
+		for(int j=0; j < 15; j++)
+		{
+			
+			tae.evaluateRunsAsync(rcs.subList(4*j, 4*j+4), cb,obs);
+			
+		}
+		StopWatch watch = new AutoStartStopWatch();
+		tae.waitForOutstandingEvaluations();
+		watch.stop();
+		
+		System.out.println("Processing all runs took: " + watch.time()/1000.0 + " seconds, reported: " + runtime.get() + " seconds");
+		
+	}
+	
+	@Test
+	/**
+	 * This tests that runs are processed in FIFO order. 
+	 */
+	public void testExplicitSeedNode()
+	{
+		
+		
+		ScheduledExecutorService execService = Executors.newScheduledThreadPool(1);
+		
+		execService.scheduleAtFixedRate(new Runnable(){
+
+			@Override
+			public void run() {
+				System.err.print(".");
+				System.err.flush();
+				
+			}
+			
+		}, 0, 250, TimeUnit.MILLISECONDS);
+		
+		File tmpDir = Files.createTempDir();
+		
+		for(int i=0; i < 4; i++)
+		{
+			startWorker(i," --tae PARAMECHO --paramecho-simulate-cores 1 --akka-id " + i + " --akka-worker-dir " + tmpDir.getAbsolutePath());
+		//startWorker(2," --tae PARAMECHO");
+		}
+		
+		try {
+			Thread.sleep(1000);
+		} catch (InterruptedException e1) {
+			Thread.currentThread().interrupt();
+		}
+		
+		
+		//AkkaTargetAlgorithmEvaluatorFactory taeFactory = 
+		AkkaTargetAlgorithmEvaluatorOptions taeOptions = (AkkaTargetAlgorithmEvaluatorOptions) TargetAlgorithmEvaluatorLoader.getAvailableTargetAlgorithmEvaluators().get("AKKA");
+		
+		
+		taeOptions.akkaClusterOptions.id = 100;
+		taeOptions.observerFrequency = 2500;
+		taeOptions.dir = tmpDir;
+		TargetAlgorithmEvaluatorFactory akkaFactory = new AkkaTargetAlgorithmEvaluatorFactory();
+		TargetAlgorithmEvaluator tae = akkaFactory.getTargetAlgorithmEvaluator(taeOptions);
+		
+		tae = new OutstandingEvaluationsTargetAlgorithmEvaluatorDecorator(tae);
+		/*
+		akkaFactory = new EchoTargetAlgorithmEvaluatorFactory();
+		EchoTargetAlgorithmEvaluatorOptions opts = (EchoTargetAlgorithmEvaluatorOptions) akkaFactory.getOptionObject();
+		
+		opts.cores = 1;
+		
+		tae = akkaFactory.getTargetAlgorithmEvaluator(opts);
+		*/
+		//System.out.println(tae.toString());
+		List<AlgorithmRunConfiguration> rcs = new ArrayList<>();
+		
+		for(int i=0; i < 100; i++)
+		{
+			ParameterConfiguration config = configSpace.getRandomParameterConfiguration(rand);
+			config.put("solved", "SAT");
+			config.put("seed",""+i);
+			//config.put("runtime",String.valueOf((i%4)/2+1)); 
+			//config.put("runtime",String.valueOf(2*i + ""));
+			config.put("runtime",String.valueOf(0.05+(i%5)));
+			AlgorithmRunConfiguration rc = new AlgorithmRunConfiguration(new ProblemInstanceSeedPair(new ProblemInstance("test"),i), 2000, config, execConfig);
+			
+			rcs.add(rc);
+		}
+		
+		//Collections.shuffle(rcs, new Random(25));
+
+	
+		
+		TargetAlgorithmEvaluatorRunObserver obs = new TargetAlgorithmEvaluatorRunObserver()
+		{
+
+			@Override
+			public synchronized void currentStatus(List<? extends AlgorithmRunResult> runs) {
+				//System.out.println("Observation:");
+				for(AlgorithmRunResult run : runs)
+				{
+					ParameterConfiguration config = run.getAlgorithmRunConfiguration().getParameterConfiguration();
+					
+					//System.out.println(config.getFormattedParameterString() + "=>" + run.getResultLine());
+					
+					run.kill();
+				}
+
+			}
+			
+		};
+		
+		 final AtomicDouble runtime = new AtomicDouble();
+		
+		
+		TargetAlgorithmEvaluatorCallback cb = new TargetAlgorithmEvaluatorCallback()
+		{
+
+			@Override
+			public synchronized void onSuccess(List<AlgorithmRunResult> runs) {
+				System.out.println("Results:");
+				for(AlgorithmRunResult run : runs)
+				{
+					ParameterConfiguration config = run.getAlgorithmRunConfiguration().getParameterConfiguration();
+					
+					System.out.println(config.getFormattedParameterString() + "=>" + run.getResultLine());
+					runtime.addAndGet(run.getRuntime());
+				}
+				
+			}
+
+			@Override
+			public void onFailure(RuntimeException e) {
+				e.printStackTrace();
+				
+			}
+			
+		};
+		for(int j=0; j < 15; j++)
+		{
+			
+			tae.evaluateRunsAsync(rcs.subList(4*j, 4*j+4), cb,obs);
+			
+		}
+		StopWatch watch = new AutoStartStopWatch();
+		tae.waitForOutstandingEvaluations();
+		watch.stop();
+		
+		System.out.println("Processing all runs took: " + watch.time()/1000.0 + " seconds, reported: " + runtime.get() + " seconds");
+		
+	}
+	
+	
 	
 	
 	@Test

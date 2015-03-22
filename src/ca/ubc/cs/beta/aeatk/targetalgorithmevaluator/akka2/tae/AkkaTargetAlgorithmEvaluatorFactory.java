@@ -12,11 +12,17 @@ public class AkkaTargetAlgorithmEvaluatorFactory extends
 		AbstractTargetAlgorithmEvaluatorFactory implements
 		TargetAlgorithmEvaluatorFactory {
 
+	private static final String NAME = "AKKA";
 	@Override
 	public String getName() {
-		return "AKKA";
+		return NAME;
 	}
 
+	public static String getTAEName()
+	{
+		return NAME;
+	}
+	
 	@Override
 	public AkkaTargetAlgorithmEvaluator getTargetAlgorithmEvaluator(
 			AbstractOptions options) {
