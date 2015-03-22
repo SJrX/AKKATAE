@@ -51,6 +51,7 @@ import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.options.AkkaWorkerOpt
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.tae.AkkaTargetAlgorithmEvaluator;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.tae.AkkaTargetAlgorithmEvaluatorFactory;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.tae.AkkaTargetAlgorithmEvaluatorOptions;
+import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.worker.AkkaWorker;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.exceptions.TargetAlgorithmAbortException;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.init.TargetAlgorithmEvaluatorBuilder;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.init.TargetAlgorithmEvaluatorLoader;
@@ -114,150 +115,28 @@ public class AkkaWorkerExecutor {
 				
 			ActorSystem system = AkkaHelper.startAkkaSystem(akkaClustOptions.networks, opts.dir, configuration, akkaClustOptions.id);	
 			
+
+			ActorRef singletonProxyManager = system.actorOf(ClusterSingletonManager.defaultProps(Props.create(TAEWorkerCoordinator.class), "coordinator", "END", null),"singleton");
+		
+
+		
+			ActorRef singleton = system.actorOf(ClusterSingletonProxy.defaultProps("/user/singleton/coordinator",null),"coordinatoryProxy");
+			
 			ExecutorService execService = Executors.newSingleThreadExecutor(new SequentiallyNamedThreadFactory("Observer Inbox Monitor", true));
 			
 			
-			
-			try {
-				
-			
-			
-			
-			 			//ActorRef singleton = system.actorOf(ClusterSingletonManager.defaultProps(Props.create(TAEWorkerCoordinator.class), "coordinator", "END", null),"singleton");
-			ActorRef singletonProxyManager = system.actorOf(ClusterSingletonManager.defaultProps(Props.create(TAEWorkerCoordinator.class), "coordinator", "END", null),"singleton");
-			
-
-			
-			
-			
-			Inbox workerThread = Inbox.create(system);
-			final Inbox observerThread = Inbox.create(system);
-			
-			
-			
-			 
-			
 			ActorRef clusterNode = system.actorOf(Props.create(ClusterManagerActor.class), "clusterManager");
 			
-			ActorRef singleton = system.actorOf(ClusterSingletonProxy.defaultProps("/user/singleton/coordinator",null),"coordinatoryProxy");
-			
-			final ActorRef backend = system.actorOf(Props.create(TAEWorkerActor.class, workerThread.getRef(), observerThread.getRef(),singleton, opts), "frontend");
-		
-			Inbox inbox = Inbox.create(system);
-			
-			final AtomicReference<AlgorithmRunConfiguration> runsToKill = new AtomicReference<>();
 			
 			
-			execService.execute(new Runnable(){
-
-				@Override
-				public void run() {
-					
-					
-					while(true)
-					{
-						Object o = observerThread.receive(new FiniteDuration(30, TimeUnit.DAYS));
-						
-						if(o instanceof KillLocalRun)
-						{
-							runsToKill.set(((KillLocalRun) o).getAlgorithmRunConfiguration());
-						}
-
-					}
-					
-				}
-				
-			});
-			
-			while(true)
+			try 
 			{
+				AkkaWorker worker = new AkkaWorker();
 				
-				Object t = workerThread.receive(new FiniteDuration(30, TimeUnit.DAYS));
-				
-				if(t instanceof RequestRunConfigurationUpdate)
-				{
-					
-					final RequestRunConfigurationUpdate rrcu = (RequestRunConfigurationUpdate) t;
-					final AlgorithmRunConfiguration rc = rrcu.getAlgorithmRunConfiguration();
-					
-					
-					runsToKill.set(null);
-					TargetAlgorithmEvaluatorRunObserver runObserver = new TargetAlgorithmEvaluatorRunObserver()
-					{
-
-						@Override
-						public void currentStatus(List<? extends AlgorithmRunResult> runs) {
-							
-							
-							AlgorithmRunResult run = runs.get(0);
-							
-							
-							if(run.getAlgorithmRunConfiguration().equals(runsToKill.get()))
-							{	
-								
-								log.warn("kill() called");
-								run.kill();
-							}
-							
-							if(!run.isRunCompleted())
-							{
-								//Only send uncompleted runs, as we can't distinguish between
-								//completion 
-								observerThread.send(backend, new AlgorithmRunStatus(run,rrcu.getUUID()));
-							}
-						}
-					};
-					
-					try 
-					{
-						//log.debug("Starting processing of run");
-						AlgorithmRunResult result = tae.evaluateRun(Collections.singletonList(rc), runObserver).get(0);
-						//log.debug("Processing of run completed");
-						observerThread.send(backend, new AlgorithmRunStatus(result,rrcu.getUUID()));	
-					} catch(TargetAlgorithmAbortException e)
-					{
-						
-						AlgorithmRunResult result = new ExistingAlgorithmRunResult((AlgorithmRunConfiguration) rc, RunStatus.ABORT, 0, 0, 0, 0, "Aborted on Worker: " + ManagementFactory.getRuntimeMXBean().getName() +"; " + e.getMessage());
-						observerThread.send(backend, new AlgorithmRunStatus(result, rrcu.getUUID()));
-					} catch(RuntimeException e)
-					{
-						
-
-						ByteArrayOutputStream bout = new ByteArrayOutputStream();
-						
-						try (PrintWriter pWriter = new PrintWriter(bout))
-						{
-							e.printStackTrace(pWriter);
-						}
-									
-						
-						String addlRunData;
-						try {
-							addlRunData = AkkaTargetAlgorithmEvaluator.ADDITIONAL_RUN_DATA_ENCODED_EXCEPTION_PREFIX + bout.toString("UTF-8").replaceAll("[\\n]", " ; ");
-							
-						} catch (UnsupportedEncodingException e1) {
-							addlRunData = "Unsupported Encoding Exception Occurred while writing Exception in " + AkkaWorkerExecutor.class.getCanonicalName() + " nested exception was:" + e.getClass().getSimpleName();
-							e1.printStackTrace();
-						}
-						
-						
-						
-						AlgorithmRunResult result = new ExistingAlgorithmRunResult((AlgorithmRunConfiguration) rc, RunStatus.ABORT, 0, 0, 0, 0, addlRunData);
-						observerThread.send(backend, new AlgorithmRunStatus(result, rrcu.getUUID()));
-					}
-				} else
-				{
-					throw new IllegalStateException("Recieved unknown message from worker actor");
-					
-				}
-			
-				
-			}
-			
+				worker.executeWorker(opts, tae, system, execService, singleton);
 			} finally
 			{
 				system.shutdown();
-				execService.shutdownNow();
 			}
 			
 			
@@ -266,4 +145,6 @@ public class AkkaWorkerExecutor {
 			log.error("Error occurred ", e);
 		}
 	}
+
+	
 }

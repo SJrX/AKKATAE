@@ -68,9 +68,13 @@ public class TAEBridgeActor extends UntypedActor {
 	private long observerFrequencyInMS;
 	
 	private final Map<UUID, Map<AlgorithmRunConfiguration,RequestRunConfigurationUpdate>> runsToKill = new HashMap<>();
-	public TAEBridgeActor(ActorRef coordinator, int observerFrequencyInMS) {
+
+	private int debugPrintStatusFrequencyInMS;
+	public TAEBridgeActor(ActorRef coordinator, int observerFrequencyInMS, int debugPrintStatusFrequencyInMS) {
 		this.coordinator = coordinator;
 		this.observerFrequencyInMS = observerFrequencyInMS;
+		
+		this.debugPrintStatusFrequencyInMS = debugPrintStatusFrequencyInMS;
 		
 		if(observerFrequencyInMS <= 0)
 		{
@@ -83,18 +87,25 @@ public class TAEBridgeActor extends UntypedActor {
 	{
 		
 		this.context().system().scheduler().schedule(FiniteDuration.Zero(), new FiniteDuration(observerFrequencyInMS, TimeUnit.MILLISECONDS), new RequestUpdateObserver(), this.context().system().dispatcher());
+		
+		if(debugPrintStatusFrequencyInMS > 0)
+		{
+			this.context().system().scheduler().schedule(FiniteDuration.Zero(), new FiniteDuration(debugPrintStatusFrequencyInMS, TimeUnit.MILLISECONDS), new RequestDebugInfo(), this.context().system().dispatcher());
+		}
+		
+		
 	}
 
 
 
-	public static Props props(final ActorRef coordinator, final int observerFrequency)
+	public static Props props(final ActorRef coordinator, final int observerFrequency, final int debugPrintStatusFrequencyInMS)
 	{
 		return Props.create(new Creator<TAEBridgeActor>(){
 
 			@Override
 			public TAEBridgeActor create() throws Exception
 			{
-				return new TAEBridgeActor(coordinator, observerFrequency);
+				return new TAEBridgeActor(coordinator, observerFrequency, debugPrintStatusFrequencyInMS);
 			}
 			
 		});
@@ -197,12 +208,20 @@ public class TAEBridgeActor extends UntypedActor {
 			if(!activeAndWaitingUUIDs.contains(wp.getUUID()))
 			{
 				log.info("Child no longer active, assigning to someone else who may want it");
-				for(UUID uuid : activeAndWaitingUUIDs)
+				
+				if(activeAndWaitingUUIDs.size() > 0)
 				{
-					ActorRef waitingChild = requestsToManagingActorMap.get(uuid);
-					
-					log.info("Recieved worker permit for {} and telling {} " , wp.getUUID(), uuid);
-					waitingChild.tell(wp, getSender());
+					for(UUID uuid : activeAndWaitingUUIDs)
+					{
+						ActorRef waitingChild = requestsToManagingActorMap.get(uuid);
+						
+						log.info("Recieved worker permit for {} and telling {} " , wp.getUUID(), uuid);
+						waitingChild.tell(wp, getSender());
+					}
+				} else
+				{
+					log.info("No children need work, sending back to coordinator");
+					coordinator.tell(new WorkerAvailable(wp.getWorker(), wp.getWorkerName()), getSelf());
 				}
 			}
 			
@@ -315,16 +334,33 @@ public class TAEBridgeActor extends UntypedActor {
 		
 		private final UpdateObserverStatus message = new UpdateObserverStatus();
 
-		private final DumpDebugInformation debugInfo = new DumpDebugInformation();
+		
 		private int i=0; 
 		@Override
 		public void run() {
 			TAEBridgeActor.this.getSelf().tell(message, getSelf());
 			
+			
+		}
+		
+	}
+	
+	private class RequestDebugInfo implements Runnable
+	{
+		
+		
+		private final DumpDebugInformation debugInfo = new DumpDebugInformation();
+		
+		
+		
+		private int i=0; 
+		@Override
+		public void run() {
 			TAEBridgeActor.this.getSelf().tell(debugInfo, getSelf());
 		}
 		
 	}
+	
 	
 	private class UpdateObserverStatus implements Serializable
 	{

@@ -4,6 +4,7 @@ package ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.tae;
 
 import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -41,20 +42,28 @@ import ca.ubc.cs.beta.aeatk.algorithmrunresult.RunStatus;
 import ca.ubc.cs.beta.aeatk.algorithmrunresult.RunningAlgorithmRunResult;
 import ca.ubc.cs.beta.aeatk.algorithmrunresult.kill.StatusVariableKillHandler;
 import ca.ubc.cs.beta.aeatk.concurrent.threadfactory.SequentiallyNamedThreadFactory;
+import ca.ubc.cs.beta.aeatk.misc.jcommander.JCommanderHelper;
+import ca.ubc.cs.beta.aeatk.options.AbstractOptions;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.AbstractAsyncTargetAlgorithmEvaluator;
+import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.TargetAlgorithmEvaluator;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.TargetAlgorithmEvaluatorCallback;
+import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.TargetAlgorithmEvaluatorOptions;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.TargetAlgorithmEvaluatorRunObserver;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.master.MasterWatchDogActor;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.actors.aeatk.TAEBridgeActor;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.actors.aeatk.TAEWorkerCoordinator;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.actors.cluster.ClusterManagerActor;
+import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.executors.AkkaWorkerExecutor;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.helper.AkkaHelper;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.messages.AlgorithmRunStatus;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.messages.RequestRunBatch;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.messages.RequestRunConfigurationUpdate;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.messages.UpdateObservationStatus;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.messages.WhereAreYou;
+import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.options.AkkaWorkerOptions;
+import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka2.worker.AkkaWorker;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.exceptions.TargetAlgorithmAbortException;
+import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.init.TargetAlgorithmEvaluatorLoader;
 
 
 /**
@@ -115,6 +124,7 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 	
 	private final BlockingQueue<UUID> observerToFire = new LinkedBlockingQueue<>();
 	
+	private final ExecutorService workerThreadPool;
 	
 	/*
 	 * 
@@ -182,7 +192,9 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 		
 		ActorRef clusterNode = system.actorOf(Props.create(ClusterManagerActor.class), "clusterManager");
 		
-		ActorRef coordinator = system.actorOf(ClusterSingletonProxy.defaultProps("/user/singleton/coordinator",null),"coordinatoryProxy");
+		final ActorRef coordinator = system.actorOf(ClusterSingletonProxy.defaultProps("/user/singleton/coordinator",null),"coordinatoryProxy");
+		
+		
 		
 		Inbox singletonWaiting = Inbox.create(system);
 		
@@ -211,7 +223,7 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 		
 		
 		
-		masterTAE = system.actorOf(Props.create(TAEBridgeActor.class,coordinator, opts.observerFrequency), "masterTAE");
+		masterTAE = system.actorOf(Props.create(TAEBridgeActor.class,coordinator, opts.observerFrequency,opts.printStatusFrequency), "masterTAE");
 		
 		
 		
@@ -278,6 +290,40 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 		
 		
 		
+		if(this.opts.syncWorker)
+		{
+			log.info("Starting synchronous worker");
+			
+			workerThreadPool = Executors.newCachedThreadPool(new SequentiallyNamedThreadFactory("AKKA Target Algorithm Evaluator Worker Threads", true));
+			
+			Runnable run = new Runnable()
+			{
+
+				@Override
+				public void run() {
+					AkkaWorker worker = new AkkaWorker();
+					
+					AkkaWorkerOptions workerOptions = new AkkaWorkerOptions();
+					
+					
+					Map<String, AbstractOptions> taeOpts = TargetAlgorithmEvaluatorLoader.getAvailableTargetAlgorithmEvaluators();
+					
+					TargetAlgorithmEvaluatorOptions taeOptions = new TargetAlgorithmEvaluatorOptions();
+					
+
+					TargetAlgorithmEvaluator tae = taeOptions.getTargetAlgorithmEvaluator(taeOpts);
+					worker.executeWorker(workerOptions, tae, system, workerThreadPool, coordinator);
+				}
+				
+			};
+			
+			workerThreadPool.execute(run);
+			
+			
+		} else
+		{
+			workerThreadPool = null;
+		}
 		
 		
 		
@@ -388,6 +434,11 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 			Thread.currentThread().interrupt();
 		}
 		
+		
+		if(workerThreadPool != null)
+		{
+			workerThreadPool.shutdownNow();
+		}
 		log.info("Inbox Processing Thread Terminated");
 		system.shutdown();
 		receivingThreadPool.shutdown();
