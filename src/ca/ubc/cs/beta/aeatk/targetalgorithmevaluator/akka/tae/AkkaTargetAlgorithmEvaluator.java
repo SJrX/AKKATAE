@@ -26,6 +26,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.io.Files;
+
 import scala.concurrent.duration.FiniteDuration;
 import akka.actor.ActorRef;
 import akka.actor.ActorSystem;
@@ -144,7 +146,7 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 	public final AtomicInteger outstandingRunBatches = new AtomicInteger(0);
 	 
 	@SuppressWarnings("unused")
-	public AkkaTargetAlgorithmEvaluator(AkkaTargetAlgorithmEvaluatorOptions opts)
+	public AkkaTargetAlgorithmEvaluator(final AkkaTargetAlgorithmEvaluatorOptions opts, final Map<String, AbstractOptions> otherTAEOptions)
 	{
 		
 		
@@ -185,24 +187,17 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 				"	  leader-actions-interval = "+ opts.akkaClusterOptions.leaderActionInterval+" ms\n"+
 				"	  unreachable-nodes-reaper-interval = " +opts.akkaClusterOptions.unreachableNodesReaperInterval+" ms\n"+
 				"	  periodic-tasks-initial-delay = "+ opts.akkaClusterOptions.periodicTasksInitialDelay + " ms\n"+
+				"     failure-detector.acceptable-heartbeat-pause = " + opts.akkaClusterOptions.failureDetectorAcceptablePause +" ms\n"+
 				"	  failure-detector.heartbeat-interval = "+opts.akkaClusterOptions.failureDetectorHeartbeatInterval+" ms\n"+
 		
 				"    auto-down-unreachable-after = " + opts.akkaClusterOptions.autoDownUnreachableAfter + " ms\n" + 
 				"  }\n" + 
 				"}\n";
 			
-			
-			
-			
-		/**
-			
-		final Config config = ConfigFactory.parseString("akka.remote.netty.tcp.port=" + (opts.akkaClusterOptions.id + 61000)).
-			      withFallback(ConfigFactory.parseString(configuration));
-			      
-		system = ActorSystem.create("ClusterSystem", config);
-		*/
+	
 		
 		system = AkkaHelper.startAkkaSystem(opts.akkaClusterOptions.networks, opts.dir, configuration, opts.akkaClusterOptions.id);
+		
 		this.opts = opts;
 		
 		
@@ -215,7 +210,7 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 		
 		
 		
-		Inbox singletonWaiting = Inbox.create(system);
+		Inbox singletonWaiting = AkkaHelper.getInbox(system);
 		
 		while(true)
 		{
@@ -246,53 +241,16 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 		
 		
 		
-		completionInbox = Inbox.create(system);
+		completionInbox = AkkaHelper.getInbox(system);
 		
-		observerInbox = Inbox.create(system);
-		
-		
-		shutdownInbox= Inbox.create(system);
-		
-		/*
-		this.opts = options;
-		String configuration = "akka {\n"+
-				"log-dead-letters-during-shutdown = off\n"+
-				"  actor {\n"+
-				"    provider = \"akka.remote.RemoteActorRefProvider\"\n"+
-				"  }\n"+
-				""+
-				"  remote {\n"+
-				"    netty.tcp {\n"+
-				"      hostname = \"127.0.0.1\"\n"+
-				"      port = 2552\n"+
-				"    }\n"+
-				"  }\n"+
-				""+
-				"}\n";
+		observerInbox = AkkaHelper.getInbox(system);
 		
 		
+		shutdownInbox= AkkaHelper.getInbox(system);
 		
-		
-		system = ActorSystem.create("AKKA-TAE-Master", ConfigFactory.parseString(configuration));
-		
-		
-		masterWatchDog = system.actorOf(Props.create(MasterWatchDogActor.class), "master");
-		
-		inbox = Inbox.create(system);
-		
-		
-		observerInbox = Inbox.create(system);
-		
-		observerInbox.send(masterWatchDog, new RegisterLocalObserverInbox());
-		
-		shutdownInbox = Inbox.create(system);
-		
-		
-		
-		*/
+	
 		receivingThreadPool.execute( new ProcessRunMessageCompletionHandler());
 		
-		//ses.scheduleAtFixedRate(new UpdateObservationStatusRequestingRunnable(), 2, 2, TimeUnit.SECONDS);
 		
 		for(int i=0; i < ManagementFactory.getOperatingSystemMXBean().getAvailableProcessors(); i++)
 		{
@@ -325,12 +283,33 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 					AkkaWorkerOptions workerOptions = new AkkaWorkerOptions();
 					
 					
-					Map<String, AbstractOptions> taeOpts = TargetAlgorithmEvaluatorLoader.getAvailableTargetAlgorithmEvaluators();
+					
+					
 					
 					TargetAlgorithmEvaluatorOptions taeOptions = new TargetAlgorithmEvaluatorOptions();
 					
-
-					TargetAlgorithmEvaluator tae = taeOptions.getTargetAlgorithmEvaluator(taeOpts);
+					taeOptions.targetAlgorithmEvaluator = opts.tae;
+					
+					
+					if(taeOptions.targetAlgorithmEvaluator.equals(AkkaTargetAlgorithmEvaluatorFactory.getTAEName()))
+					{
+						//In reality we are just too lazy to allow you to specify a different set of TAE options
+						throw new IllegalArgumentException("You cannot create a synchronous worker that that also uses the AKKA TAE to resolve things, maybe this article will satiate you: http://en.wikipedia.org/wiki/List_of_paradoxes");
+					}
+					
+					
+						
+					Map<String, AbstractOptions> opts;
+					if(otherTAEOptions != null)
+					{
+						opts = otherTAEOptions;
+					} else
+					{
+						log.warn("The method being used to load the target algorithm evaulator is deprecated and consequently your options are being ignored, contact the developer to fix this");
+						opts = TargetAlgorithmEvaluatorLoader.getAvailableTargetAlgorithmEvaluators();
+					}
+					
+					TargetAlgorithmEvaluator tae = taeOptions.getTargetAlgorithmEvaluator(opts);
 					worker.executeWorker(workerOptions, tae, system, workerThreadPool, coordinator,workerRegulatingSemaphore);
 				}
 				
@@ -386,7 +365,8 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 		
 		
 		UUID uuid = UUID.randomUUID();
-		//synchronized(uuid)
+		RequestRunBatch rrb;
+		synchronized(uuid)
 		{
 			CallerContext ctx = new CallerContext(runConfigs, taeCallback, runStatusObserver);
 			uuidToCallerContextMap.put(uuid, ctx);
@@ -415,14 +395,13 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 
 			uuidToCompletedRunResults.put(uuid, new ConcurrentHashMap<AlgorithmRunConfiguration, AlgorithmRunResult>());
 			
+		
 			
-			
-			//log.debug("Submitting run batch: {}" , uuid);
-			
-			RequestRunBatch rrb = new RequestRunBatch(observerInbox.getRef(), completionInbox.getRef(), runConfigs, uuid);
-			
-			completionInbox.send(masterTAE, rrb);
+			rrb= new RequestRunBatch(observerInbox.getRef(), completionInbox.getRef(), runConfigs, uuid);
 		}
+		
+		 completionInbox.send(masterTAE, rrb);
+		
 		
 		
 		

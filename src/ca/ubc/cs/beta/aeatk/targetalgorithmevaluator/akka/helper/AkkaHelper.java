@@ -43,6 +43,7 @@ import scala.util.Random;
 import akka.actor.ActorSystem;
 import akka.actor.Address;
 import akka.actor.AddressFromURIString;
+import akka.actor.Inbox;
 import akka.cluster.Cluster;
 
 public class AkkaHelper {
@@ -452,6 +453,50 @@ attemptLoop:
 	
 	private static class RestartException extends Exception
 	{
+		
+	}
+
+	/**
+	 * They say doing the same thing over and over again is a sign of insanity :)
+	 * 
+	 * In this case it should work there is a race condition:
+	 * 
+	 * See this post: https://groups.google.com/forum/#!searchin/akka-user/akka.actor.UnstartedCell$20/akka-user/NnlggvIm1gU/u2M-TbYfSyQJ
+	 * Also this:
+	 * https://github.com/akka/akka/issues/15409
+	 * 
+	 * 
+	 * @param system
+	 * @return
+	 */
+	public static Inbox getInbox(ActorSystem system) {
+		
+		while(true)
+		{
+			try 
+			{
+				 return Inbox.create(system);
+				 
+				 
+			} catch(ClassCastException e)
+			{
+				
+				/*
+				if(e.getMessage().contains("akka.actor.UnstartedCell"))
+				{
+					System.err.println("Good");
+				}*/
+				
+				try {
+					LoggerFactory.getLogger(AkkaHelper.class).warn("Couldn't create Inbox, sleeping for 1500 ms (you can most likely disregard this message, unless it seems to be stuck in an infinite loop)");
+					Thread.sleep(1500);
+				} catch (InterruptedException e1) {
+					Thread.currentThread().interrupt();
+					throw new IllegalStateException("Couldn't create Inbox and was interrupted");
+				}
+				
+			}
+		}
 		
 	}
 }

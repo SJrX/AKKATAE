@@ -131,12 +131,14 @@ public class AkkaWorkerExecutor {
 					"	  unreachable-nodes-reaper-interval = " +akkaClustOptions.unreachableNodesReaperInterval+" ms\n"+
 					"	  periodic-tasks-initial-delay = "+ akkaClustOptions.periodicTasksInitialDelay + " ms\n"+
 					"	  failure-detector.heartbeat-interval = "+akkaClustOptions.failureDetectorHeartbeatInterval+" ms\n"+
+					"     failure-detector.acceptable-heartbeat-pause = " + akkaClustOptions.failureDetectorAcceptablePause +" ms\n"+
 					"     auto-down-unreachable-after = " +akkaClustOptions.autoDownUnreachableAfter+ " ms\n" + 
 					"  }\n" + 
 					"}\n";
 				
 				
 			ActorSystem system = AkkaHelper.startAkkaSystem(akkaClustOptions.networks, opts.dir, configuration, akkaClustOptions.id);	
+			
 			
 
 			ActorRef singletonProxyManager = system.actorOf(ClusterSingletonManager.defaultProps(Props.create(TAEWorkerCoordinator.class), "coordinator", "END", null),"singleton");

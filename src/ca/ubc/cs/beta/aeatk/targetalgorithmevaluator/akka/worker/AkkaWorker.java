@@ -28,6 +28,7 @@ import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.TargetAlgorithmEvaluator;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.TargetAlgorithmEvaluatorRunObserver;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.actors.aeatk.TAEWorkerActor;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.executors.AkkaWorkerExecutor;
+import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.helper.AkkaHelper;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.AlgorithmRunStatus;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.RejectedExecution;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.RequestRunConfigurationUpdate;
@@ -59,8 +60,11 @@ public class AkkaWorker {
 
 
 
-		Inbox workerThread = Inbox.create(system);
-		final Inbox observerThread = Inbox.create(system);
+		Inbox workerThread = AkkaHelper.getInbox(system);
+		
+		
+		
+		final Inbox observerThread = AkkaHelper.getInbox(system);
 		
 		
 		

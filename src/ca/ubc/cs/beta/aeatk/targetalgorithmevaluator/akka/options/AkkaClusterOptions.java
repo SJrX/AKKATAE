@@ -41,11 +41,14 @@ public class AkkaClusterOptions extends AbstractOptions{
 	public int  periodicTasksInitialDelay = 300;
 	
 	@UsageTextField(level = OptionLevel.DEVELOPER)
-	@Parameter(names="--akka-tae-failure-detector-heartbeat-interval", description="Periodic Tasks Initial Delay", validateWith=FixedPositiveInteger.class)
-	public int  failureDetectorHeartbeatInterval = 1000;
+	@Parameter(names="--akka-tae-failure-detector-heartbeat-interval", description="How often to send a heart beat message", validateWith=FixedPositiveInteger.class)
+	public int  failureDetectorHeartbeatInterval = 5000;
 	
 	@Parameter(names="--akka-tae-auto-down-unreachable-after", description="Auto down unreachable after (ms)", validateWith=FixedPositiveInteger.class)
 	public int autoDownUnreachableAfter = 10000;
+
+	@Parameter(names="--akka-tae-failure-detector-acceptable-heartbeat-pause", description="Minimum amount of time a node should be unresponsive before we consider it down", validateWith=FixedPositiveInteger.class)
+	public int failureDetectorAcceptablePause = 15000;
 	
 	
 	/* gossip-interval = 200 ms

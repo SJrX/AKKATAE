@@ -348,14 +348,13 @@ public class AkkaTargetAlgorithmEvaluatorTester {
 		for(int i=0; i < 4; i++)
 		{
 			startWorker(i," --tae PARAMECHO --paramecho-simulate-cores 1 " + " --akka-worker-dir " + tmpDir.getAbsolutePath());
-		//startWorker(2," --tae PARAMECHO");
 		}
 		//AkkaTargetAlgorithmEvaluatorFactory taeFactory = 
 		AkkaTargetAlgorithmEvaluatorOptions taeOptions = (AkkaTargetAlgorithmEvaluatorOptions) TargetAlgorithmEvaluatorLoader.getAvailableTargetAlgorithmEvaluators().get("AKKA");
 		
 		taeOptions.dir = tmpDir;
 		taeOptions.observerFrequency = 2500;
-		taeOptions.printStatusFrequency = 3000;
+		taeOptions.printStatusFrequency = 15000;
 		TargetAlgorithmEvaluatorFactory akkaFactory = new AkkaTargetAlgorithmEvaluatorFactory();
 		TargetAlgorithmEvaluator tae = akkaFactory.getTargetAlgorithmEvaluator(taeOptions);
 		
@@ -444,6 +443,8 @@ public class AkkaTargetAlgorithmEvaluatorTester {
 		watch.stop();
 		
 		System.out.println("Processing all runs took: " + watch.time()/1000.0 + " seconds, reported: " + runtime.get() + " seconds");
+		
+		tae.notifyShutdown();
 		
 	}
 	
