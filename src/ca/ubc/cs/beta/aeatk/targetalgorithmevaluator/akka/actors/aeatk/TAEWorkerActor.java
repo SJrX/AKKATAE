@@ -1,5 +1,6 @@
 package ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.actors.aeatk;
 
+import java.io.Serializable;
 import java.lang.management.ManagementFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -9,14 +10,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import scala.concurrent.duration.FiniteDuration;
-import ca.ubc.cs.beta.aeatk.algorithmrunconfiguration.AlgorithmRunConfiguration;
 import ca.ubc.cs.beta.aeatk.algorithmrunresult.AlgorithmRunResult;
 import ca.ubc.cs.beta.aeatk.algorithmrunresult.RunningAlgorithmRunResult;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.AlgorithmRunStatus;
-import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.KillLocalRun;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.RejectedExecution;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.RequestRunConfigurationUpdate;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.WorkerAvailable;
+import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.worker.KillLocalRun;
+import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.worker.SynchronousWorkerAvailable;
+import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.worker.SynchronousWorkerUnavailable;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.options.AkkaWorkerOptions;
 import akka.actor.ActorRef;
 import akka.actor.UntypedActor;
@@ -42,15 +44,11 @@ public class TAEWorkerActor extends UntypedActor {
 	
 	private ActorRef watchingActor = null;
 	
-	private final AtomicBoolean doingWork = new AtomicBoolean(false);
+	//private final AtomicBoolean doingWork = new AtomicBoolean(false);
 
 	private ActorRef coordinator;
-	
-	private Runnable pollCoordinator;
-	
+
 	private final Logger log = LoggerFactory.getLogger(getClass());
-	
-	
 	
 	private final int NUMBER_OF_ADDITIONAL_NOTIFICATIONS; //Maybe make this an option one day lol, I don't that will happen.
 	//
@@ -61,6 +59,11 @@ public class TAEWorkerActor extends UntypedActor {
 
 	private AkkaWorkerOptions opts;
 	
+	private boolean workerAvailable = true;
+	
+	
+	private final WorkerAvailable waMessage ;
+	
 	public TAEWorkerActor(ActorRef workerThreadInbox, ActorRef observerThreadInbox, ActorRef coordinator, AkkaWorkerOptions opts)
 	{
 		this.workerThreadInbox = workerThreadInbox;
@@ -68,14 +71,15 @@ public class TAEWorkerActor extends UntypedActor {
 		this.coordinator = coordinator;
 		this.opts = opts;
 		this.NUMBER_OF_ADDITIONAL_NOTIFICATIONS = opts.additionalNotifications;
+		this.waMessage = new WorkerAvailable(this.getSelf(), ManagementFactory.getRuntimeMXBean().getName());
 	}
 	
 	@Override
 	public void preStart()
 	{
 		
-		pollCoordinator = new PollCoordinatorWithFreeWorker(doingWork, getSelf(), coordinator);
-		this.context().system().scheduler().schedule(new FiniteDuration(0, TimeUnit.SECONDS), new FiniteDuration(opts.workerPollAvailability, TimeUnit.SECONDS), pollCoordinator, this.context().system().dispatcher());
+		
+		this.context().system().scheduler().schedule(new FiniteDuration(0, TimeUnit.SECONDS), new FiniteDuration(opts.workerPollAvailability, TimeUnit.SECONDS), new PollCoordinatorWithFreeWorker( getSelf()), this.context().system().dispatcher());
 	}
 	@Override
 	public void onReceive(Object arg0) throws Exception {
@@ -88,7 +92,7 @@ public class TAEWorkerActor extends UntypedActor {
 			if(completedRequests.get(rrcu) != null)
 			{
 				getSender().tell(new AlgorithmRunStatus((AlgorithmRunResult) completedRequests.get(rrcu), rrcu.getUUID()), getSelf());
-			} else if(currentRequest == null)
+			} else if(currentRequest == null && workerAvailable)
 			{
 				currentRequest = rrcu;
 			
@@ -96,7 +100,6 @@ public class TAEWorkerActor extends UntypedActor {
 				log.debug("Starting run for {}, seed: {} ", rrcu.getUUID() , rrcu.getAlgorithmRunConfiguration().getProblemInstanceSeedPair().getSeed());
 				watchingActor = getSender();
 				latestStatus = new RunningAlgorithmRunResult(rrcu.getAlgorithmRunConfiguration(), 0, 0, 0, (long) 0, 0, null);
-				doingWork.set(true);
 			} else if(currentRequest.equals(rrcu))
 			{
 				
@@ -136,21 +139,48 @@ public class TAEWorkerActor extends UntypedActor {
 			latestStatus = ((AlgorithmRunStatus) arg0).getAlgorithmRunResult();
 			
 			
-			if(latestStatus.isRunCompleted())
-			{
-				doingWork.set(false);
-				pollCoordinator.run();
-				completedRequests.put(currentRequest, latestStatus);
-				currentRequest = null;
-				log.trace("Worker done request, marking available");
-			}
-			
-			if(numberOfAdditionalNotificationsLeft-- > 0)
+			if(numberOfAdditionalNotificationsLeft-- > 0 || latestStatus.isRunCompleted())
 			{
 				watchingActor.tell(arg0, getSelf());
 			}
 			
+			if(latestStatus.isRunCompleted())
+			{
+				
+				this.coordinator.tell(waMessage, getSelf());
+				completedRequests.put(currentRequest, latestStatus);
+				currentRequest = null;
+				watchingActor = null;
+				log.trace("Worker done request, marking available");
+			}
 			
+			
+			
+			
+		} else if(arg0 instanceof SynchronousWorkerAvailable)
+		{
+			workerAvailable = true;
+		} else if(arg0 instanceof SynchronousWorkerUnavailable)
+		{
+			workerAvailable = false;
+			
+			if(currentRequest != null)
+			{
+				log.debug("Worker unavailable rejecting execution for:  {} ", currentRequest.getUUID());
+				
+				
+				watchingActor.tell(new RejectedExecution(currentRequest.getAlgorithmRunConfiguration()), getSelf());
+				
+				currentRequest = null;
+				watchingActor = null;
+			}
+		} else if(arg0 instanceof Poll)
+		{
+			if(currentRequest == null)
+			{
+				this.coordinator.tell(waMessage, getSelf());
+				log.debug("Notifying that worker is available: {}", waMessage.getWorkerName());
+			}
 		} else
 		{
 			unhandled(arg0);
@@ -161,30 +191,23 @@ public class TAEWorkerActor extends UntypedActor {
 	private static final class PollCoordinatorWithFreeWorker implements Runnable
 	{
 		
-		private final AtomicBoolean doingWork;
 		private final ActorRef sender;
-		private final ActorRef coordinator;
-		private final WorkerAvailable wa;
 		
-		private final Logger log = LoggerFactory.getLogger(getClass());
-		public PollCoordinatorWithFreeWorker(AtomicBoolean doingWork, ActorRef sender, ActorRef coordinator)
+		private final Poll poll = new Poll();
+		public PollCoordinatorWithFreeWorker( ActorRef sender)
 		{
-			this.doingWork = doingWork;
 			this.sender = sender;
-			this.coordinator = coordinator;
-			this.wa = new WorkerAvailable(sender, ManagementFactory.getRuntimeMXBean().getName());
 		}
 		
 		@Override
 		public void run()
 		{
-			if(!this.doingWork.get())
-			{
-				
-				
-				this.coordinator.tell(wa, sender);
-				log.debug("Notifying that worker is available: {}", wa.getWorkerName());
-			}
+			sender.tell(poll, sender);
 		}
+	}
+	
+	private static class Poll implements Serializable
+	{
+		
 	}
 }

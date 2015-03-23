@@ -25,13 +25,13 @@ import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.AlgorithmRunB
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.AlgorithmRunProcessingFailed;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.AlgorithmRunStatus;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.AllAlgorithmRunsDispatched;
-import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.DumpDebugInformation;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.RequestRunBatch;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.RequestRunConfigurationUpdate;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.RequestWorkers;
-import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.UpdateObservationStatus;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.WorkerAvailable;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.WorkerPermit;
+import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.tae.DumpDebugInformation;
+import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.tae.UpdateObservationStatus;
 import akka.actor.ActorRef;
 import akka.actor.ActorSystem;
 import akka.actor.Cancellable;

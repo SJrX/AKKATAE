@@ -16,9 +16,11 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.slf4j.Logger;
@@ -136,6 +138,11 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 	
 	public static final String ADDITIONAL_RUN_DATA_ENCODED_EXCEPTION_PREFIX = "ENCODED EXCEPTION: ";
 	
+	private final Semaphore workerRegulatingSemaphore = new Semaphore(0,true);
+	
+	
+	public final AtomicInteger outstandingRunBatches = new AtomicInteger(0);
+	 
 	@SuppressWarnings("unused")
 	public AkkaTargetAlgorithmEvaluator(AkkaTargetAlgorithmEvaluatorOptions opts)
 	{
@@ -324,7 +331,7 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 					
 
 					TargetAlgorithmEvaluator tae = taeOptions.getTargetAlgorithmEvaluator(taeOpts);
-					worker.executeWorker(workerOptions, tae, system, workerThreadPool, coordinator);
+					worker.executeWorker(workerOptions, tae, system, workerThreadPool, coordinator,workerRegulatingSemaphore);
 				}
 				
 			};
@@ -361,6 +368,22 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 			taeCallback.onSuccess(Collections.<AlgorithmRunResult>emptyList());
 			return;
 		}
+		
+		
+		
+		if(workerThreadPool != null)
+		{
+			//We have a synchronized worker
+			
+			int totalOutstandingRuns = this.outstandingRunBatches.incrementAndGet();
+			if(totalOutstandingRuns != 1)
+			{
+				throw new IllegalStateException("Total Outstanding Runs was " + totalOutstandingRuns + ". You cannot use the synchronous worker option unless only one run will be submitted at a time");
+			}
+			
+			this.workerRegulatingSemaphore.release();
+		}
+		
 		
 		UUID uuid = UUID.randomUUID();
 		//synchronized(uuid)
@@ -601,7 +624,19 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 									
 									if(outstandingRunConfigurations.size() == 0)
 									{
-										//log.info("Notifying callback");
+										
+										if(workerThreadPool != null)
+										{
+											outstandingRunBatches.decrementAndGet();
+											try {
+												workerRegulatingSemaphore.acquire();
+											} catch (InterruptedException e) {
+											
+												e.printStackTrace();
+												Thread.currentThread().interrupt();
+											}
+										}
+										
 										callbacksToFire.add(uuid);
 									} else
 									{

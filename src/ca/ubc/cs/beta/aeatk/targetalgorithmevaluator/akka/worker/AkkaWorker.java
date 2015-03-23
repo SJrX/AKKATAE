@@ -7,6 +7,7 @@ import java.lang.management.ManagementFactory;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -28,8 +29,11 @@ import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.TargetAlgorithmEvaluatorRun
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.actors.aeatk.TAEWorkerActor;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.executors.AkkaWorkerExecutor;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.AlgorithmRunStatus;
-import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.KillLocalRun;
+import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.RejectedExecution;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.RequestRunConfigurationUpdate;
+import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.worker.KillLocalRun;
+import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.worker.SynchronousWorkerAvailable;
+import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.worker.SynchronousWorkerUnavailable;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.options.AkkaWorkerOptions;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.tae.AkkaTargetAlgorithmEvaluator;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.exceptions.TargetAlgorithmAbortException;
@@ -44,8 +48,9 @@ public class AkkaWorker {
 	 * @param tae
 	 * @param system
 	 * @param execService
+	 * @param workerRegulatingSemaphore used to prevent the worker from executing at all times.
 	 */
-	public void executeWorker(AkkaWorkerOptions opts, TargetAlgorithmEvaluator tae, ActorSystem system,	ExecutorService execService, ActorRef singleton) {
+	public void executeWorker(AkkaWorkerOptions opts, TargetAlgorithmEvaluator tae, ActorSystem system,	ExecutorService execService, ActorRef singleton, Semaphore workerRegulatingSemaphore) {
 		try
 		{
 
@@ -91,17 +96,44 @@ public class AkkaWorker {
 			
 		});
 		
-		log.info("Worker awaiting work");
+		log.debug("Worker awaiting work");
+		
+		workerThread.send(backend,new SynchronousWorkerAvailable());
+		
 		
 		while(true)
 		{
-			
+		
 			Object t = workerThread.receive(new FiniteDuration(30, TimeUnit.DAYS));
+			
+		
 			
 			if(t instanceof RequestRunConfigurationUpdate)
 			{
 				
 				final RequestRunConfigurationUpdate rrcu = (RequestRunConfigurationUpdate) t;
+				
+
+				if(!workerRegulatingSemaphore.tryAcquire())
+				{
+				
+					//Not available
+					//Notify actor that we are unavailable
+					
+					workerThread.send(backend, new SynchronousWorkerUnavailable());
+					try {
+						workerRegulatingSemaphore.acquire();
+					} catch (InterruptedException e) {
+						Thread.currentThread().interrupt();
+						return;
+					}
+					
+					workerThread.send(backend,new SynchronousWorkerAvailable());
+					continue;
+				}
+				
+				
+				
 				final AlgorithmRunConfiguration rc = rrcu.getAlgorithmRunConfiguration();
 				
 				
@@ -119,7 +151,7 @@ public class AkkaWorker {
 						if(run.getAlgorithmRunConfiguration().equals(runsToKill.get()))
 						{	
 							
-							log.warn("kill() called");
+							//log.warn("kill() called");
 							run.kill();
 						}
 						
@@ -169,6 +201,8 @@ public class AkkaWorker {
 					AlgorithmRunResult result = new ExistingAlgorithmRunResult((AlgorithmRunConfiguration) rc, RunStatus.ABORT, 0, 0, 0, 0, addlRunData);
 					observerThread.send(backend, new AlgorithmRunStatus(result, rrcu.getUUID()));
 				}
+				
+				workerRegulatingSemaphore.release();
 			} else
 			{
 				throw new IllegalStateException("Recieved unknown message from worker actor");

@@ -1,4 +1,4 @@
-package ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages;
+package ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.tae;
 
 import java.io.Serializable;
 

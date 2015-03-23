@@ -355,6 +355,7 @@ public class AkkaTargetAlgorithmEvaluatorTester {
 		
 		taeOptions.dir = tmpDir;
 		taeOptions.observerFrequency = 2500;
+		taeOptions.printStatusFrequency = 3000;
 		TargetAlgorithmEvaluatorFactory akkaFactory = new AkkaTargetAlgorithmEvaluatorFactory();
 		TargetAlgorithmEvaluator tae = akkaFactory.getTargetAlgorithmEvaluator(taeOptions);
 		

@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -43,9 +44,9 @@ import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.actors.aeatk.TAEWorker
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.actors.cluster.ClusterManagerActor;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.helper.AkkaHelper;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.AlgorithmRunStatus;
-import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.KillLocalRun;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.RequestRunConfigurationUpdate;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.WhereAreYou;
+import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.worker.KillLocalRun;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.options.AkkaClusterOptions;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.options.AkkaWorkerOptions;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.tae.AkkaTargetAlgorithmEvaluator;
@@ -69,15 +70,16 @@ public class AkkaWorkerExecutor {
 			AkkaWorkerOptions opts = new AkkaWorkerOptions();
 			
 			
+			
 			Map<String, AbstractOptions> taeOpts = TargetAlgorithmEvaluatorLoader.getAvailableTargetAlgorithmEvaluators();
 			
 			
 			try {
-				System.out.println(Arrays.toString(args));
+			
 				JCommanderHelper.parseCheckingForHelpAndVersion(args, opts, taeOpts);
 			} finally
 			{
-				//opts.log.initializeLogging();
+				opts.log.initializeLogging();
 				log = LoggerFactory.getLogger(AkkaWorkerExecutor.class);
 			}
 			
@@ -153,8 +155,8 @@ public class AkkaWorkerExecutor {
 			try 
 			{
 				AkkaWorker worker = new AkkaWorker();
-				
-				worker.executeWorker(opts, tae, system, execService, singleton);
+				Semaphore noopSemaphore = new Semaphore(1);
+				worker.executeWorker(opts, tae, system, execService, singleton, noopSemaphore);
 			} finally
 			{
 				system.shutdown();
