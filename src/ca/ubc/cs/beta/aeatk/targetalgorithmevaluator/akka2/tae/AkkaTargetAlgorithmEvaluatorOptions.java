@@ -6,6 +6,7 @@ import java.nio.file.Files;
 import com.beust.jcommander.Parameter;
 import com.beust.jcommander.ParametersDelegate;
 
+import ca.ubc.cs.beta.aeatk.logging.LogLevel;
 import ca.ubc.cs.beta.aeatk.misc.jcommander.converter.WritableDirectoryConverter;
 import ca.ubc.cs.beta.aeatk.misc.jcommander.validator.NonNegativeInteger;
 import ca.ubc.cs.beta.aeatk.misc.options.UsageTextField;
@@ -30,6 +31,9 @@ public class AkkaTargetAlgorithmEvaluatorOptions extends AbstractOptions {
 	
 	@Parameter(names={"--akka-tae-print-status-frequency"}, description="If > 0 we will print the current status this often in milli seconds", validateWith=NonNegativeInteger.class)
 	public int printStatusFrequency = 0;
+	
+	@Parameter(names={"--akka-tae-log-level"}, description="Log level for AKKA Target Algorithm Evaluator events")
+	public LogLevel logLevel = LogLevel.WARN;
 	
 	
 }

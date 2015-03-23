@@ -87,12 +87,33 @@ public class AkkaWorkerExecutor {
 			
 			
 			
+			String logLevel;
 			
+			switch(opts.log.logLevel)
+			{
+			
+			case TRACE:
+				logLevel = "DEBUG";
+				break;
+			case WARN:
+				logLevel = "WARNING";
+				break;
+			case OFF:
+			case DEBUG:
+			case ERROR:
+			case INFO:
+				logLevel = opts.log.logLevel.name();
+				break;
+				
+			default:
+				throw new IllegalStateException("Unknown log level: " + opts.log.logLevel);
+			
+			}
 		
 			AkkaClusterOptions akkaClustOptions = ((AkkaTargetAlgorithmEvaluatorOptions)taeOpts.get(AkkaTargetAlgorithmEvaluatorFactory.getTAEName())).akkaClusterOptions;
 				
 			String configuration ="akka {\n" + 
-					"  loglevel = \"WARNING\"\n" +
+					"  loglevel = \""+logLevel+"\"\n" +
 					"  actor {\n" + 
 					"    provider = \"akka.cluster.ClusterActorRefProvider\"\n" + 
 					"  }\n" + 

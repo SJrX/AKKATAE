@@ -53,14 +53,14 @@ public class TAEWorkerCoordinator extends UntypedActor {
 			
 			WorkerAvailable wa = (WorkerAvailable) msg;
 			
-			log.warn("Worker Available: " + wa.getWorkerName());
+			log.debug("Worker Available: " + wa.getWorkerName());
 			freeWorkers.add(wa);
 			assignRunsIfPossible();
 		} else if (msg instanceof RequestWorkers)
 		{
 			
 			RequestWorkers rw = (RequestWorkers) msg;
-			log.warn("Recieved request for worker from: " + rw.getUUID() + " needing: " + rw.getRequestCount());
+			log.debug("Recieved request for worker from: " + rw.getUUID() + " needing: " + rw.getRequestCount());
 			AtomicInteger oldValue = workerRequests.putIfAbsent(rw, new AtomicInteger(rw.getRequestCount()));
 			workerAssignments.putIfAbsent(rw,new AtomicInteger(0));
 			if(oldValue == null)
@@ -121,7 +121,7 @@ public class TAEWorkerCoordinator extends UntypedActor {
 					}
 					
 					//log.warn("Sending worker permit");
-					log.warn("Assigning worker {} to: {}, thus far: {} ", wa.getWorkerName(), rw.getUUID(), workerAssignments.get(rw).incrementAndGet());
+					log.debug("Assigning worker {} to: {}, thus far: {} ", wa.getWorkerName(), rw.getUUID(), workerAssignments.get(rw).incrementAndGet());
 					rw.getRequestor().tell(wp, this.getSender());
 					
 				}

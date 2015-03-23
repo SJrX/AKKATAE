@@ -51,6 +51,7 @@ public class TAEWorkerActor extends UntypedActor {
 	private final Logger log = LoggerFactory.getLogger(getClass());
 	
 	
+	
 	private final int NUMBER_OF_ADDITIONAL_NOTIFICATIONS; //Maybe make this an option one day lol, I don't that will happen.
 	//
 	/**
@@ -92,7 +93,7 @@ public class TAEWorkerActor extends UntypedActor {
 				currentRequest = rrcu;
 			
 				workerThreadInbox.tell(rrcu, getSelf());
-				log.warn("Starting run for {}, seed: {} ", rrcu.getUUID() , rrcu.getAlgorithmRunConfiguration().getProblemInstanceSeedPair().getSeed());
+				log.debug("Starting run for {}, seed: {} ", rrcu.getUUID() , rrcu.getAlgorithmRunConfiguration().getProblemInstanceSeedPair().getSeed());
 				watchingActor = getSender();
 				latestStatus = new RunningAlgorithmRunResult(rrcu.getAlgorithmRunConfiguration(), 0, 0, 0, (long) 0, 0, null);
 				doingWork.set(true);
@@ -123,7 +124,7 @@ public class TAEWorkerActor extends UntypedActor {
 				
 			} else
 			{
-				log.warn("Rejected execution for:  {} ", ((RequestRunConfigurationUpdate) arg0).getUUID());
+				log.debug("Rejected execution for:  {} ", ((RequestRunConfigurationUpdate) arg0).getUUID());
 				//log.warn("Rejected execution for {}, seed: {}",((RequestRunConfigurationUpdate) arg0).getUUID(), ((RequestRunConfigurationUpdate) arg0).getAlgorithmRunConfiguration().getProblemInstanceSeedPair().getSeed());
 				getSender().tell(new RejectedExecution(((RequestRunConfigurationUpdate) arg0).getAlgorithmRunConfiguration()), getSelf());
 			}
@@ -141,7 +142,7 @@ public class TAEWorkerActor extends UntypedActor {
 				pollCoordinator.run();
 				completedRequests.put(currentRequest, latestStatus);
 				currentRequest = null;
-				log.warn("Worker done request, marking available");
+				log.trace("Worker done request, marking available");
 			}
 			
 			if(numberOfAdditionalNotificationsLeft-- > 0)
@@ -182,7 +183,7 @@ public class TAEWorkerActor extends UntypedActor {
 				
 				
 				this.coordinator.tell(wa, sender);
-				log.warn("Notifying that worker is available: {}", wa.getWorkerName());
+				log.debug("Notifying that worker is available: {}", wa.getWorkerName());
 			}
 		}
 	}

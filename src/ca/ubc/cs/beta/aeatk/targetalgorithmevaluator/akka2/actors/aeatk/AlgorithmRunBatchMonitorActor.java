@@ -154,7 +154,7 @@ public class AlgorithmRunBatchMonitorActor extends UntypedActor {
 					ActorRef child = this.context().actorOf(Props.create(AlgorithmRunMonitorActor.class,rc , wp.getWorker(), uuid));
 					this.rcToChildActor.put(rc, child);
 					
-					log.info("UUID {} Started processing seed: {}", uuid, rc.getProblemInstanceSeedPair().getSeed());
+					log.debug("UUID {} Started processing seed: {}", uuid, rc.getProblemInstanceSeedPair().getSeed());
 					
 					
 				} else
@@ -221,7 +221,7 @@ public class AlgorithmRunBatchMonitorActor extends UntypedActor {
 			//log.warn("Notifying about: " + status.getAlgorithmRunResult().getResultLine()); 
 			if(status.getAlgorithmRunResult().getRunStatus().equals(RunStatus.ABORT))
 			{
-				log.error("The AKKA Target Algorithm Evaluator detected an ABORT but does not currently short circuit the evaluation of runs");
+				log.warn("The AKKA Target Algorithm Evaluator detected an ABORT but does not currently short circuit the evaluation of runs, the rest will continue executing");
 				
 			} 
 			
@@ -273,7 +273,7 @@ public class AlgorithmRunBatchMonitorActor extends UntypedActor {
 					
 					if(unstartedRunsToKill.add(rrcu.getAlgorithmRunConfiguration()))
 					{
-						log.warn("Unstarted run to kill for UUID: " + uuid);
+						log.debug("Unstarted run to kill for UUID: " + uuid);
 						
 						
 					}
@@ -365,8 +365,9 @@ public class AlgorithmRunBatchMonitorActor extends UntypedActor {
 		sb.append("\t Number of Children: " + i);
 		
 		
-		System.out.println(sb);
-		System.out.flush();
+		//System.out.println(sb);
+		
+		log.info("Current Status:\n{}",sb);
 		
 		if(halt)
 		{

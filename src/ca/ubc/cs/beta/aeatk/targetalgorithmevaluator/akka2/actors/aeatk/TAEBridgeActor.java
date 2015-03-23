@@ -200,14 +200,14 @@ public class TAEBridgeActor extends UntypedActor {
 			if(child != null)
 			{
 				//Always tell the child if it's there
-				log.info("Recieved worker permit for {} and sending to child " , wp.getUUID());
+				log.debug("Recieved worker permit for {} and sending to child " , wp.getUUID());
 				child.tell(wp, getSender());
 			}
 			
 			
 			if(!activeAndWaitingUUIDs.contains(wp.getUUID()))
 			{
-				log.info("Child no longer active, assigning to someone else who may want it");
+				log.debug("Child no longer active, assigning to someone else who may want it");
 				
 				if(activeAndWaitingUUIDs.size() > 0)
 				{
@@ -215,12 +215,12 @@ public class TAEBridgeActor extends UntypedActor {
 					{
 						ActorRef waitingChild = requestsToManagingActorMap.get(uuid);
 						
-						log.info("Recieved worker permit for {} and telling {} " , wp.getUUID(), uuid);
+						log.debug("Recieved worker permit for {} and telling {} " , wp.getUUID(), uuid);
 						waitingChild.tell(wp, getSender());
 					}
 				} else
 				{
-					log.info("No children need work, sending back to coordinator");
+					log.debug("No children need work, sending back to coordinator");
 					coordinator.tell(new WorkerAvailable(wp.getWorker(), wp.getWorkerName()), getSelf());
 				}
 			}

@@ -150,8 +150,30 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 	public AkkaTargetAlgorithmEvaluator(AkkaTargetAlgorithmEvaluatorOptions opts)
 	{
 		
+		
+		String logLevel;
+		
+		switch(opts.logLevel)
+		{
+		
+		case TRACE:
+			logLevel = "DEBUG";
+			break;
+		case WARN:
+			logLevel = "WARNING";
+			break;
+		case OFF:
+		case DEBUG:
+		case ERROR:
+		case INFO:
+			
+		default:
+			throw new IllegalStateException("Unknown log level: " + opts.logLevel);
+		
+		}
+		
 		String configuration ="akka {\n" + 
-				"  loglevel = \"WARNING\"\n" +
+				"  loglevel = \""+logLevel+"\"\n" +
 				"  actor {\n" + 
 				"    provider = \"akka.cluster.ClusterActorRefProvider\"\n" + 
 				"  }\n" + 
@@ -690,7 +712,7 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 							uuidToOutstandingRunConfigsSet.remove(uuid);
 							uuidToObserverRunResultMap.remove(uuid);
 							lastObserverNotificationTime.remove(uuid);
-							System.err.println("Firing callback for: " + uuid);
+							//System.err.println("Firing callback for: " + uuid);
 						}
 					}
 					

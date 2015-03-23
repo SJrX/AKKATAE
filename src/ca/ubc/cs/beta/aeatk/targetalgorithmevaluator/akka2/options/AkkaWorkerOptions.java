@@ -25,7 +25,7 @@ public class AkkaWorkerOptions extends AbstractOptions{
 	public TargetAlgorithmEvaluatorOptions taeOptions = new TargetAlgorithmEvaluatorOptions();
 	
 	@ParametersDelegate
-	public LoggingOptions log = new ConsoleOnlyLoggingOptions();
+	public ConsoleOnlyLoggingOptions log = new ConsoleOnlyLoggingOptions();
 	
 	@UsageTextField(level=OptionLevel.ADVANCED)
 	@Parameter(names={"--akka-notify-available-frequency"}, description="How often should a worker notify the coordinator that it is available in seconds (provided messages aren't lost this should have almost no effect)", validateWith=NonNegativeInteger.class)
