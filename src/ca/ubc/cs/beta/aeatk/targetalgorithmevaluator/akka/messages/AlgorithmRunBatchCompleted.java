@@ -3,17 +3,17 @@ package ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages;
 import java.io.Serializable;
 import java.util.UUID;
 
+public class AlgorithmRunBatchCompleted implements Serializable {
 
-public class UpdateObservationStatus implements Serializable{
-
-	private final UUID uuid;
-	public UpdateObservationStatus(UUID uuid)
+	private UUID uuid;
+	
+	public AlgorithmRunBatchCompleted(UUID uuid)
 	{
 		this.uuid = uuid;
 	}
 	
-	public UUID getUUID()
-	{
+	public UUID getUUID() {
 		return uuid;
 	}
+
 }
