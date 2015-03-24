@@ -434,7 +434,7 @@ public class AkkaTargetAlgorithmEvaluatorTester {
 		};
 		
 		//Was 15
-		for(int j=0; j < 1; j++)
+		for(int j=0; j < 15; j++)
 		{
 			
 			tae.evaluateRunsAsync(rcs.subList(4*j, 4*j+4), cb,obs);

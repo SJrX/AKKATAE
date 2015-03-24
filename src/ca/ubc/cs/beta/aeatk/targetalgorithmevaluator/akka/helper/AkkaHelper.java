@@ -194,7 +194,7 @@ attemptLoop:
 					
 					
 					
-					List<Address> nodes = getSeedNodes(directory);
+					List<Address> nodes = getSeedNodes(directory,targetFile);
 					log.info("Seed nodes for id {} are {}", id, nodes);
 					cluster.joinSeedNodes(scala.collection.JavaConversions.asScalaBuffer(nodes).toList());
 					log.info("Cluster node started as id-" + id);
@@ -283,7 +283,7 @@ attemptLoop:
 		
 	}
 	
-	public static List<Address> getSeedNodes(File dir)
+	public static List<Address> getSeedNodes(File dir, File myFile)
 	{
 		if(!dir.isDirectory())
 		{
@@ -326,7 +326,33 @@ attemptLoop:
 		}
 		
 		Arrays.sort(matchingFiles);
-		ArrayDeque<String> deque = new ArrayDeque<String>(Arrays.asList(matchingFiles));
+		
+		
+		
+		
+		int firstIndex = 0;
+		
+		int lastIndex;
+		
+	
+		
+		for(lastIndex=1; lastIndex < matchingFiles.length; lastIndex++)
+		{
+			
+	
+			
+			if(matchingFiles[lastIndex].compareTo(myFile.getName()) >= 0)
+			{
+				break;
+			}
+		}
+		
+		//We only use seed nodes less than ourselves unless we are the first entry, in which case ourself is a valid seed node.
+		List<String> filenames = Arrays.asList(matchingFiles).subList(firstIndex, lastIndex);
+		
+		log.debug("Using the following as seed nodes: {}", filenames);
+		
+		ArrayDeque<String> deque = new ArrayDeque<String>(filenames);
 		
 		
 		
@@ -376,7 +402,7 @@ attemptLoop:
 				String port = m.group("port");
 				
 				
-				addresses.add(new Address("akka.tcp","ClusterSystem",ipAddress, Integer.valueOf(port)));
+				addresses.add(getAddress(ipAddress, port));
 				
 				//AddressFromURIString.apply("akka.tcp://" + ipAddress + ":" + port +"/"));
 			}
@@ -396,6 +422,18 @@ attemptLoop:
 		
 		
 		
+	}
+
+
+
+
+	/**
+	 * @param ipAddress
+	 * @param port
+	 * @return
+	 */
+	private static Address getAddress(String ipAddress, String port) {
+		return new Address("akka.tcp","ClusterSystem",ipAddress, Integer.valueOf(port));
 	}
 	
 	public static String getIPAddress(String nics)
