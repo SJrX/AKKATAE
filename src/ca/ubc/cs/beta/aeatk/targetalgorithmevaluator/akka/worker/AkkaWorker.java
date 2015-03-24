@@ -9,6 +9,8 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.slf4j.Logger;
@@ -51,8 +53,10 @@ public class AkkaWorker {
 	 * @param system
 	 * @param execService
 	 * @param workerRegulatingSemaphore used to prevent the worker from executing at all times.
+	 * @param lastTimestamp 
+	 * @param timeoutReached 
 	 */
-	public void executeWorker(AkkaWorkerOptions opts, TargetAlgorithmEvaluator tae, ActorSystem system,	ExecutorService execService, ActorRef singleton, Semaphore workerRegulatingSemaphore) {
+	public void executeWorker(AkkaWorkerOptions opts, TargetAlgorithmEvaluator tae, ActorSystem system,	ExecutorService execService, ActorRef singleton, Semaphore workerRegulatingSemaphore, final AtomicBoolean timeoutReached, final AtomicLong lastTimestamp) {
 		try
 		{
 
@@ -91,7 +95,9 @@ public class AkkaWorker {
 					Object o;
 					try
 					{
+						lastTimestamp.set(System.currentTimeMillis());
 						o= observerThread.receive(new FiniteDuration(30, TimeUnit.DAYS));
+						lastTimestamp.set(Long.MAX_VALUE);
 					} catch(Throwable t)
 					{
 						if (t instanceof InterruptedException)
@@ -123,7 +129,22 @@ public class AkkaWorker {
 		while(true)
 		{
 		
-			Object t = workerThread.receive(new FiniteDuration(30, TimeUnit.DAYS));
+			Object t;
+			try
+			{
+				t = workerThread.receive(new FiniteDuration(30, TimeUnit.DAYS));
+			} catch(Throwable e)
+			{
+				if(e instanceof InterruptedException)
+				{
+					Thread.currentThread().interrupt();
+					return;
+					
+				} else
+				{
+					throw e;
+				}
+			}
 			
 		
 			
@@ -167,7 +188,7 @@ public class AkkaWorker {
 						AlgorithmRunResult run = runs.get(0);
 						
 						
-						if(run.getAlgorithmRunConfiguration().equals(runsToKill.get()))
+						if(timeoutReached.get() || run.getAlgorithmRunConfiguration().equals(runsToKill.get()))
 						{	
 							
 							//log.warn("kill() called");
@@ -188,12 +209,19 @@ public class AkkaWorker {
 					//log.debug("Starting processing of run");
 					AlgorithmRunResult result = tae.evaluateRun(Collections.singletonList(rc), runObserver).get(0);
 					//log.debug("Processing of run completed");
-					observerThread.send(backend, new AlgorithmRunStatus(result,rrcu.getUUID()));	
+					if(!result.getRunStatus().equals(RunStatus.KILLED) || !timeoutReached.get())
+					{
+						observerThread.send(backend, new AlgorithmRunStatus(result,rrcu.getUUID()));
+					}
+						
 				} catch(TargetAlgorithmAbortException e)
 				{
 					
 					AlgorithmRunResult result = new ExistingAlgorithmRunResult((AlgorithmRunConfiguration) rc, RunStatus.ABORT, 0, 0, 0, 0, "Aborted on Worker: " + ManagementFactory.getRuntimeMXBean().getName() +"; " + e.getMessage());
-					observerThread.send(backend, new AlgorithmRunStatus(result, rrcu.getUUID()));
+					if(!timeoutReached.get())
+					{
+						observerThread.send(backend, new AlgorithmRunStatus(result, rrcu.getUUID()));
+					}
 				} catch(RuntimeException e)
 				{
 					
@@ -210,6 +238,8 @@ public class AkkaWorker {
 					try {
 						addlRunData = AkkaTargetAlgorithmEvaluator.ADDITIONAL_RUN_DATA_ENCODED_EXCEPTION_PREFIX + bout.toString("UTF-8").replaceAll("[\\n]", " ; ");
 						
+						log.error("Error occured processing run:", e);
+						
 					} catch (UnsupportedEncodingException e1) {
 						addlRunData = "Unsupported Encoding Exception Occurred while writing Exception in " + AkkaWorkerExecutor.class.getCanonicalName() + " nested exception was:" + e.getClass().getSimpleName();
 						e1.printStackTrace();
@@ -218,7 +248,11 @@ public class AkkaWorker {
 					
 					
 					AlgorithmRunResult result = new ExistingAlgorithmRunResult((AlgorithmRunConfiguration) rc, RunStatus.ABORT, 0, 0, 0, 0, addlRunData);
-					observerThread.send(backend, new AlgorithmRunStatus(result, rrcu.getUUID()));
+					
+					if(!timeoutReached.get())
+					{
+						observerThread.send(backend, new AlgorithmRunStatus(result, rrcu.getUUID()));
+					}
 				}
 				
 				workerRegulatingSemaphore.release();

@@ -8,6 +8,7 @@ import com.beust.jcommander.ParametersDelegate;
 import ca.ubc.cs.beta.aeatk.help.HelpOptions;
 import ca.ubc.cs.beta.aeatk.logging.ConsoleOnlyLoggingOptions;
 import ca.ubc.cs.beta.aeatk.logging.LoggingOptions;
+import ca.ubc.cs.beta.aeatk.misc.jcommander.converter.DurationConverter;
 import ca.ubc.cs.beta.aeatk.misc.jcommander.converter.WritableDirectoryConverter;
 import ca.ubc.cs.beta.aeatk.misc.jcommander.validator.NonNegativeInteger;
 import ca.ubc.cs.beta.aeatk.misc.options.OptionLevel;
@@ -40,6 +41,17 @@ public class AkkaWorkerOptions extends AbstractOptions{
 	
 	@ParametersDelegate
 	public HelpOptions helpOpts = new HelpOptions();
+	
+	
+	@UsageTextField(defaultValues="5 minutes")
+	@Parameter(names={"--idle-time-limit","--idle-limit","--idleLimit"}, description="Amount of time to not have a task before shutting down" , converter=DurationConverter.class)
+	public int idleLimit = 300;
+	
+	@UsageTextField(level=OptionLevel.BASIC, defaultValues="no time limit")
+	@Parameter(names={"--time-limit","--timeLimit"}, description="Amount of time to work for, you should set this to the time limit of the cluster job minus some slack, otherwise this node will be disappeared.", converter=DurationConverter.class)
+	public volatile int timeLimit = Integer.MAX_VALUE;
+	
+	
 	
 	
 	

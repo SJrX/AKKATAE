@@ -307,7 +307,7 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 					}
 					
 					TargetAlgorithmEvaluator tae = taeOptions.getTargetAlgorithmEvaluator(opts);
-					worker.executeWorker(workerOptions, tae, system, synchronousWorkerThreadPool, coordinator,workerRegulatingSemaphore);
+					worker.executeWorker(workerOptions, tae, system, synchronousWorkerThreadPool, coordinator,workerRegulatingSemaphore, new AtomicBoolean(false), new AtomicLong(System.currentTimeMillis()));
 				}
 				
 			};

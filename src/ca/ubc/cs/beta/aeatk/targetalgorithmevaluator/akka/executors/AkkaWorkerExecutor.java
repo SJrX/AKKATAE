@@ -10,8 +10,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.slf4j.Logger;
@@ -36,6 +39,7 @@ import ca.ubc.cs.beta.aeatk.algorithmrunresult.ExistingAlgorithmRunResult;
 import ca.ubc.cs.beta.aeatk.algorithmrunresult.RunStatus;
 import ca.ubc.cs.beta.aeatk.concurrent.threadfactory.SequentiallyNamedThreadFactory;
 import ca.ubc.cs.beta.aeatk.misc.jcommander.JCommanderHelper;
+import ca.ubc.cs.beta.aeatk.misc.returnvalues.AEATKReturnValues;
 import ca.ubc.cs.beta.aeatk.options.AbstractOptions;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.TargetAlgorithmEvaluator;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.TargetAlgorithmEvaluatorRunObserver;
@@ -67,7 +71,7 @@ public class AkkaWorkerExecutor {
 		
 		try
 		{
-			AkkaWorkerOptions opts = new AkkaWorkerOptions();
+			final AkkaWorkerOptions opts = new AkkaWorkerOptions();
 			
 			
 			
@@ -150,6 +154,58 @@ public class AkkaWorkerExecutor {
 				
 				ExecutorService execService = Executors.newSingleThreadExecutor(new SequentiallyNamedThreadFactory("Observer Inbox Monitor", true));
 				
+				ScheduledExecutorService ses = Executors.newScheduledThreadPool(3, new SequentiallyNamedThreadFactory("Timeout Limits",true));
+				
+				
+				final Thread currentThread = Thread.currentThread();
+				final AtomicBoolean timeoutReached = new AtomicBoolean(false);
+				ses.schedule(new Runnable() {
+
+					@Override
+					public void run() {
+						log.warn("Timelimit has been reached, terminating worker");
+						currentThread.interrupt();
+						timeoutReached.set(true);
+						
+					}
+				
+				}, opts.timeLimit, TimeUnit.SECONDS);
+				
+				
+				ses.schedule(new Runnable()
+				{
+
+					@Override
+					public void run() {
+						
+						log.warn("Worker has not shutdown even though the timelimit expired 30 minutes ago, maybe misbehaving TAE?.");
+						currentThread.interrupt();
+						timeoutReached.set(true);
+						Runtime.getRuntime().exit(AEATKReturnValues.DEADLOCK_DETECTED);
+						
+						
+					}
+					
+				}, Math.max(opts.timeLimit + 1800, Integer.MAX_VALUE), TimeUnit.SECONDS);
+				
+				
+				final AtomicLong lastTimestamp = new AtomicLong(System.currentTimeMillis());
+				
+				ses.scheduleAtFixedRate(new Runnable(){
+
+					@Override
+					public void run() {
+						
+						if(lastTimestamp.get() + opts.idleLimit < System.currentTimeMillis() + 10)
+						{
+							log.warn("Worker has been idle for too long, shutting down");
+							currentThread.interrupt();
+							timeoutReached.set(true);
+						}
+					}
+					
+				}, opts.idleLimit, Math.max(opts.idleLimit/10, 15) , TimeUnit.SECONDS);
+				
 				
 				ActorRef clusterNode = system.actorOf(Props.create(ClusterManagerActor.class), "clusterManager");
 				
@@ -159,12 +215,13 @@ public class AkkaWorkerExecutor {
 				{
 					AkkaWorker worker = new AkkaWorker();
 					Semaphore noopSemaphore = new Semaphore(1);
-					worker.executeWorker(opts, tae, system, execService, singleton, noopSemaphore);
+					worker.executeWorker(opts, tae, system, execService, singleton, noopSemaphore, timeoutReached, lastTimestamp);
 					
 				} finally
 				{
 					execService.shutdownNow();
 					system.shutdown();
+					ses.shutdown();
 				}
 			}
 				

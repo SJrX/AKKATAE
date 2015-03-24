@@ -1,4 +1,4 @@
-import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.*;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -452,6 +452,90 @@ public class AkkaTargetAlgorithmEvaluatorTester {
 		} catch(RuntimeException e)
 		{
 			e.printStackTrace();
+		}
+		
+	}
+	
+	@Test
+	/**
+	 * This tests that runs are processed in FIFO order. 
+	 */
+	public void testWorkerIdleTimeLimit()
+	{
+		
+		
+		
+		File tmpDir = Files.createTempDir();
+		
+	
+		Process p = startWorker(1," --tae PARAMECHO --paramecho-simulate-cores 1 " + "--idle-limit 5 --akka-worker-dir " + tmpDir.getAbsolutePath());
+		
+		StopWatch watch = new AutoStartStopWatch();
+		while(true)
+		{
+			try
+			{
+				p.exitValue();
+				break;
+			} catch(IllegalThreadStateException e)
+			{
+				
+				if(watch.time() > 7500)
+				{
+					fail("Expected that the process would have stopped by now: " + watch.time()  + " ms");
+				}
+				try {
+					Thread.sleep(250);
+					
+				} catch (InterruptedException e1) {
+					Thread.currentThread().interrupt();
+					return;
+				}
+			}
+		
+		
+		}
+		
+	}
+	
+	@Test
+	/**
+	 * This tests that runs are processed in FIFO order. 
+	 */
+	public void testWorkerTimeLimit()
+	{
+		
+		
+		
+		File tmpDir = Files.createTempDir();
+		
+	
+		Process p = startWorker(1," --tae PARAMECHO --paramecho-simulate-cores 1 " + "--time-limit 5 --akka-worker-dir " + tmpDir.getAbsolutePath());
+		
+		StopWatch watch = new AutoStartStopWatch();
+		while(true)
+		{
+			try
+			{
+				p.exitValue();
+				break;
+			} catch(IllegalThreadStateException e)
+			{
+				
+				if(watch.time() > 7500)
+				{
+					fail("Expected that the process would have stopped by now: " + watch.time()  + " ms");
+				}
+				try {
+					Thread.sleep(250);
+					
+				} catch (InterruptedException e1) {
+					Thread.currentThread().interrupt();
+					return;
+				}
+			}
+		
+		
 		}
 		
 	}
