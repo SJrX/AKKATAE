@@ -15,6 +15,7 @@ import ca.ubc.cs.beta.aeatk.algorithmrunresult.RunningAlgorithmRunResult;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.AlgorithmRunStatus;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.RejectedExecution;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.RequestRunConfigurationUpdate;
+import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.ShutdownMessage;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.WorkerAvailable;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.worker.KillLocalRun;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.worker.SynchronousWorkerAvailable;
@@ -81,6 +82,7 @@ public class TAEWorkerActor extends UntypedActor {
 		
 		this.context().system().scheduler().schedule(new FiniteDuration(0, TimeUnit.SECONDS), new FiniteDuration(opts.workerPollAvailability, TimeUnit.SECONDS), new PollCoordinatorWithFreeWorker( getSelf()), this.context().system().dispatcher());
 	}
+	
 	@Override
 	public void onReceive(Object arg0) throws Exception {
 		
@@ -181,7 +183,17 @@ public class TAEWorkerActor extends UntypedActor {
 				this.coordinator.tell(waMessage, getSelf());
 				log.debug("Notifying that worker is available: {}", waMessage.getWorkerName());
 			}
-		} else
+		} else if(arg0 instanceof ShutdownMessage)
+		{
+		 workerThreadInbox.tell(arg0, getSelf());
+		 
+		 if(currentRequest != null)
+		 {
+			 observerThreadInbox.tell(new KillLocalRun(currentRequest.getAlgorithmRunConfiguration()),getSender());
+		 }
+		
+		 context().stop(getSelf());
+		}else
 		{
 			unhandled(arg0);
 		}

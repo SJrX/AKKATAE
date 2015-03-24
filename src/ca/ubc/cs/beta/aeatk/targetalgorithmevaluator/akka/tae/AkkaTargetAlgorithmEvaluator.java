@@ -53,10 +53,12 @@ import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.helper.AkkaHelper;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.AlgorithmRunStatus;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.RequestRunBatch;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.RequestRunConfigurationUpdate;
+import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.ShutdownMessage;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.WhereAreYou;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.options.AkkaWorkerOptions;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.worker.AkkaWorker;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.exceptions.TargetAlgorithmAbortException;
+import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.exceptions.TargetAlgorithmEvaluatorShutdownException;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.init.TargetAlgorithmEvaluatorLoader;
 
 
@@ -106,11 +108,11 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 	
 	private final Logger log = LoggerFactory.getLogger(getClass());
 	
-	private final ExecutorService receivingThreadPool = Executors.newSingleThreadExecutor(new SequentiallyNamedThreadFactory("AKKA TAE Response Processing Thread", false));
+	private final ExecutorService runCompleteMessageProcessingThreadPool = Executors.newSingleThreadExecutor(new SequentiallyNamedThreadFactory("AKKA TAE Response Processing Thread", false));
 	
-	private final ExecutorService callbackThreadPool = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() * 2, new SequentiallyNamedThreadFactory("AKKA TAE Callback Processing Thread", false));
+	private final ExecutorService taeCallbackCompletionThreadPool = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() * 2, new SequentiallyNamedThreadFactory("AKKA TAE Callback Processing Thread", false));
 	
-	private final ExecutorService observerThreadPool = Executors.newCachedThreadPool( new SequentiallyNamedThreadFactory("AKKA TAE Observer Processing Thread", false));
+	private final ExecutorService taeObserverNotifyThreadPool = Executors.newCachedThreadPool( new SequentiallyNamedThreadFactory("AKKA TAE Observer Processing Thread", false));
 	
 	private final ScheduledExecutorService ses = Executors.newScheduledThreadPool(1, new SequentiallyNamedThreadFactory("AKKA TAE Observation Scheduling Thread", false));
 	
@@ -118,14 +120,7 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 	
 	private final BlockingQueue<UUID> observerToFire = new LinkedBlockingQueue<>();
 	
-	private final ExecutorService workerThreadPool;
-	
-	/*
-	 * 
-	private final ActorRef masterWatchDog; 
-	
-	private final Inbox inbox;
-	*/
+	private final ExecutorService synchronousWorkerThreadPool;
 	
 	
 	private final Inbox completionInbox;
@@ -137,6 +132,7 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 	 
 	
 	private final ActorRef masterTAE;
+	private final ActorRef coordinator;
 	
 	public static final String ADDITIONAL_RUN_DATA_ENCODED_EXCEPTION_PREFIX = "ENCODED EXCEPTION: ";
 	
@@ -206,7 +202,7 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 		
 		ActorRef clusterNode = system.actorOf(Props.create(ClusterManagerActor.class), "clusterManager");
 		
-		final ActorRef coordinator = system.actorOf(ClusterSingletonProxy.defaultProps("/user/singleton/coordinator",null),"coordinatoryProxy");
+		coordinator = system.actorOf(ClusterSingletonProxy.defaultProps("/user/singleton/coordinator",null),"coordinatoryProxy");
 		
 		
 		
@@ -214,7 +210,7 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 		
 		while(true)
 		{
-			log.debug("Waiting for worker coordinator to come online");
+			
 			try 
 			{
 				singletonWaiting.send(coordinator, new WhereAreYou());
@@ -230,6 +226,7 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 				
 			} catch(TimeoutException e)
 			{
+				log.info("Waiting for worker coordinator to come online, trying again");
 				
 				//Doesn't matter
 			}	
@@ -249,20 +246,20 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 		shutdownInbox= AkkaHelper.getInbox(system);
 		
 	
-		receivingThreadPool.execute( new ProcessRunMessageCompletionHandler());
+		runCompleteMessageProcessingThreadPool.execute( new ProcessRunMessageCompletionHandler());
 		
 		
 		for(int i=0; i < ManagementFactory.getOperatingSystemMXBean().getAvailableProcessors(); i++)
 		{
-			observerThreadPool.execute(new TargetAlgorithmEvaluatorObserverNotificationRunnable());
+			taeObserverNotifyThreadPool.execute(new TargetAlgorithmEvaluatorObserverNotificationRunnable());
 		}
 		
-		observerThreadPool.execute(new ObserverMailboxReader());
+		taeObserverNotifyThreadPool.execute(new ObserverMailboxReader());
 		
 		
 		for(int i=0; i < ManagementFactory.getOperatingSystemMXBean().getAvailableProcessors(); i++)
 		{
-			callbackThreadPool.execute(new TargetAlgorithmEvaluatorCallbackNotificationRunnable());
+			taeCallbackCompletionThreadPool.execute(new TargetAlgorithmEvaluatorCallbackNotificationRunnable());
 		}
 		
 		
@@ -271,7 +268,7 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 		{
 			log.info("Starting synchronous worker");
 			
-			workerThreadPool = Executors.newCachedThreadPool(new SequentiallyNamedThreadFactory("AKKA Target Algorithm Evaluator Worker Threads", true));
+			synchronousWorkerThreadPool = Executors.newCachedThreadPool(new SequentiallyNamedThreadFactory("AKKA Target Algorithm Evaluator Worker Threads", true));
 			
 			Runnable run = new Runnable()
 			{
@@ -310,17 +307,17 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 					}
 					
 					TargetAlgorithmEvaluator tae = taeOptions.getTargetAlgorithmEvaluator(opts);
-					worker.executeWorker(workerOptions, tae, system, workerThreadPool, coordinator,workerRegulatingSemaphore);
+					worker.executeWorker(workerOptions, tae, system, synchronousWorkerThreadPool, coordinator,workerRegulatingSemaphore);
 				}
 				
 			};
 			
-			workerThreadPool.execute(run);
+			synchronousWorkerThreadPool.execute(run);
 			
 			
 		} else
 		{
-			workerThreadPool = null;
+			synchronousWorkerThreadPool = null;
 		}
 		
 		
@@ -337,6 +334,8 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 	 */
 	public void evaluateRunsAsync(List<AlgorithmRunConfiguration> runConfigs, TargetAlgorithmEvaluatorCallback taeCallback,	TargetAlgorithmEvaluatorRunObserver runStatusObserver) {
 	
+		
+		
 		if(runConfigs.size() == 0)
 		{
 			if(runStatusObserver != null)
@@ -348,9 +347,13 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 			return;
 		}
 		
+		if(notifyShutdownCalled.get())
+		{
+			throw new IllegalStateException("Target Algorithm Evaluator has already been shutdown, cannot submit runs to it");
+		}
 		
 		
-		if(workerThreadPool != null)
+		if(synchronousWorkerThreadPool != null)
 		{
 			//We have a synchronized worker
 			
@@ -429,46 +432,89 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 	@Override
 	public synchronized void notifyShutdown() {
 	
+
 		if(!this.notifyShutdownCalled.compareAndSet(false, true))
 		{
+			
 			return;
 		}
-		
-		ses.shutdownNow();
-		if(true) throw new IllegalStateException("ROAR");
-		
-		//COMMENTED OUT UNTIL METHOD FIX shutdownInbox.send(masterWatchDog, new ShutdownMessage());
+
 	
-		Object o =  shutdownInbox.receive(new FiniteDuration(1, TimeUnit.DAYS)); //Waiting for object so that we know everything else before has been processed.
+		log.info("Shutting down Target Algorithm Evaluator");
 		
-		log.info("Shutting down Inbox Processing Thread");
-		try {
-			this.inboxProcessingThreadDone.await();
-		} catch (InterruptedException e1) {
-			Thread.currentThread().interrupt();
-		}
+
+		
+		ses.scheduleAtFixedRate(new Runnable() {
+
+			@Override
+			public void run() {
+				shutdownInbox.send(masterTAE, new ShutdownMessage());
+				shutdownInbox.send(coordinator, new ShutdownMessage());
+				
+				shutdownInbox.send(completionInbox.getRef(), new ShutdownMessage());
+				shutdownInbox.send(observerInbox.getRef(), new ShutdownMessage());
+				
+				
+			}
+			
+		}, 0, 2, TimeUnit.SECONDS);
 		
 		
-		if(workerThreadPool != null)
+		this.runCompleteMessageProcessingThreadPool.shutdownNow();
+		this.taeCallbackCompletionThreadPool.shutdownNow();
+		this.taeObserverNotifyThreadPool.shutdownNow();
+		if(synchronousWorkerThreadPool != null)
 		{
-			workerThreadPool.shutdownNow();
+			this.synchronousWorkerThreadPool.shutdownNow();
 		}
-		log.info("Inbox Processing Thread Terminated");
-		system.shutdown();
-		receivingThreadPool.shutdown();
-		log.info("Waiting for System Thread Termination");
-		system.awaitTermination();
 		
-		log.info("Waiting for Recieving Thread Termination");
-		receivingThreadPool.shutdownNow();
+		
 		
 		try {
-			receivingThreadPool.awaitTermination(24,TimeUnit.DAYS);
+			this.taeCallbackCompletionThreadPool.awaitTermination(365, TimeUnit.DAYS);
+			
+			this.runCompleteMessageProcessingThreadPool.awaitTermination(365, TimeUnit.DAYS);
+			this.taeObserverNotifyThreadPool.awaitTermination(365, TimeUnit.DAYS);
+			
+			if(synchronousWorkerThreadPool != null)
+			{
+				this.synchronousWorkerThreadPool.awaitTermination(365,TimeUnit.DAYS);
+			}
+
+			//Shutdown this one last
+			ses.shutdownNow();
+			ses.awaitTermination(365, TimeUnit.DAYS);
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
-			return;
+			log.warn("Interrupted during TAE shutdown, TAE may not have cleaned up properly");
 		}
+		
+		
+		
+		
+		
+		shutdownInbox.send(masterTAE, new ShutdownMessage());
+		shutdownInbox.send(coordinator, new ShutdownMessage());
+		
+		shutdownInbox.send(completionInbox.getRef(), new ShutdownMessage());
+		shutdownInbox.send(observerInbox.getRef(), new ShutdownMessage());
+		
+		
+		system.shutdown();
 	
+		TargetAlgorithmEvaluatorShutdownException taeShutdownException = new TargetAlgorithmEvaluatorShutdownException();
+		
+		log.debug("Notifying callbacks of shutdown");
+		for(CallerContext callContext : uuidToCallerContextMap.values())
+		{
+			try
+			{
+				callContext.getTargetAlgorithmEvaluatorCallback().onFailure(taeShutdownException);
+			} catch(RuntimeException t)
+			{
+				log.error("Error occurred notifying of failure", t);
+			}
+		}
 		
 		log.info("AKKA Target Algorithm Evaluator Shutdown");
 	}
@@ -485,9 +531,24 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 			{
 				while(true)
 				{
-					Object o = observerInbox.receive(new FiniteDuration(28, TimeUnit.DAYS));
+					Object o;
+					try
+					{
+						 o = observerInbox.receive(new FiniteDuration(28, TimeUnit.DAYS));
+					} catch(Throwable t)
+					{
+						if(t instanceof InterruptedException)
+						{
+							Thread.currentThread().interrupt();
+							return;
+							
+						} else
+						{
+							throw t;
+						}
+					}
 
-					//log.info("Got Message: {}",  o);
+					
 					if(o instanceof AlgorithmRunStatus)
 					{
 						AlgorithmRunStatus ars = (AlgorithmRunStatus) o;
@@ -518,6 +579,10 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 							
 						} 
 						
+					} else if(o instanceof ShutdownMessage)
+					{
+						observerInbox.send(observerInbox.getRef(), o);	
+							
 					} else
 					{
 						log.error("Got unknown message on observer inbox: {}" ,o);
@@ -555,8 +620,15 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 						}
 					} catch(Throwable e)
 					{
-						System.out.println("Error: " + e);
-						throw e;
+						if(e instanceof InterruptedException)
+						{
+							Thread.currentThread().interrupt();
+							return;
+						} else
+						{
+							System.out.println("Error: " + e);
+							throw e;
+						}
 					}
 					//log.info("Message recieved: {}", o);
 					if(o == null)
@@ -604,7 +676,7 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 									if(outstandingRunConfigurations.size() == 0)
 									{
 										
-										if(workerThreadPool != null)
+										if(synchronousWorkerThreadPool != null)
 										{
 											outstandingRunBatches.decrementAndGet();
 											try {
@@ -631,7 +703,14 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 						
 						
 						
+					} else if(o instanceof ShutdownMessage)
+					{
+						completionInbox.send(completionInbox.getRef(), o);
+					} else
+					{
+						log.warn("Recieved unknown message in the completion Inbox: {} , {}", o.getClass().getCanonicalName(), o);
 					}
+					
 					
 				}
 			} finally

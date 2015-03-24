@@ -432,7 +432,9 @@ public class AkkaTargetAlgorithmEvaluatorTester {
 			}
 			
 		};
-		for(int j=0; j < 15; j++)
+		
+		//Was 15
+		for(int j=0; j < 1; j++)
 		{
 			
 			tae.evaluateRunsAsync(rcs.subList(4*j, 4*j+4), cb,obs);
@@ -444,7 +446,13 @@ public class AkkaTargetAlgorithmEvaluatorTester {
 		
 		System.out.println("Processing all runs took: " + watch.time()/1000.0 + " seconds, reported: " + runtime.get() + " seconds");
 		
-		tae.notifyShutdown();
+		try 
+		{
+			tae.notifyShutdown();
+		} catch(RuntimeException e)
+		{
+			e.printStackTrace();
+		}
 		
 	}
 	
@@ -902,7 +910,7 @@ public class AkkaTargetAlgorithmEvaluatorTester {
 	
 	
 	
-	@After
+	//@After
 	public void afterTest()
 	{
 		for(Process p : processes)

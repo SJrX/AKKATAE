@@ -2,9 +2,12 @@ package ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.actors.aeatk;
 
 import java.lang.management.ManagementFactory;
 import java.util.ArrayDeque;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.PriorityQueue;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -13,6 +16,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.RequestWorkers;
+import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.ShutdownMessage;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.WhereAreYou;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.WorkerAvailable;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.WorkerPermit;
@@ -21,15 +25,16 @@ import akka.actor.UntypedActor;
 
 public class TAEWorkerCoordinator extends UntypedActor {
 
-	ArrayDeque<WorkerAvailable> freeWorkers = new ArrayDeque<>();
+	private final ArrayDeque<WorkerAvailable> freeWorkers = new ArrayDeque<>();
 	
+	private final PriorityQueue<RequestWorkers> pQue = new PriorityQueue<RequestWorkers>();
 	
+	private final ConcurrentMap<RequestWorkers, AtomicInteger> workerRequests = new ConcurrentHashMap<>();
 	
-	PriorityQueue<RequestWorkers> pQue = new PriorityQueue<RequestWorkers>();
+	private final ConcurrentMap<RequestWorkers, AtomicInteger> workerAssignments = new ConcurrentHashMap<>();
 	
-	ConcurrentMap<RequestWorkers, AtomicInteger> workerRequests = new ConcurrentHashMap<>();
+	private final Set<ActorRef> allWorkersToShutdown = new HashSet<>();
 	
-	ConcurrentMap<RequestWorkers, AtomicInteger> workerAssignments = new ConcurrentHashMap<>();
 	
 	private final Logger log = LoggerFactory.getLogger(getClass());
 	
@@ -54,6 +59,7 @@ public class TAEWorkerCoordinator extends UntypedActor {
 			WorkerAvailable wa = (WorkerAvailable) msg;
 			
 			log.debug("Worker Available: " + wa.getWorkerName());
+			allWorkersToShutdown.add(wa.getWorkerActorRef());
 			freeWorkers.add(wa);
 			assignRunsIfPossible();
 		} else if (msg instanceof RequestWorkers)
@@ -79,6 +85,13 @@ public class TAEWorkerCoordinator extends UntypedActor {
 		} else if(msg instanceof WhereAreYou ) 
 		{
 			getSender().tell(ManagementFactory.getRuntimeMXBean().getName(), getSelf());
+		} else if(msg instanceof ShutdownMessage)
+		{
+			
+			for(ActorRef worker: allWorkersToShutdown)
+			{
+				worker.tell(msg, getSelf());
+			}
 		} else
 		{
 			unhandled(msg);

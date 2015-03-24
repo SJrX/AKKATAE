@@ -32,6 +32,7 @@ import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.helper.AkkaHelper;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.AlgorithmRunStatus;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.RejectedExecution;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.RequestRunConfigurationUpdate;
+import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.ShutdownMessage;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.worker.KillLocalRun;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.worker.SynchronousWorkerAvailable;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.worker.SynchronousWorkerUnavailable;
@@ -87,7 +88,21 @@ public class AkkaWorker {
 				
 				while(true)
 				{
-					Object o = observerThread.receive(new FiniteDuration(30, TimeUnit.DAYS));
+					Object o;
+					try
+					{
+						o= observerThread.receive(new FiniteDuration(30, TimeUnit.DAYS));
+					} catch(Throwable t)
+					{
+						if (t instanceof InterruptedException)
+						{
+							Thread.currentThread().interrupt();
+							return;
+						} else
+						{
+							throw t;
+						}
+					}
 					
 					if(o instanceof KillLocalRun)
 					{
@@ -207,7 +222,11 @@ public class AkkaWorker {
 				}
 				
 				workerRegulatingSemaphore.release();
-			} else
+			} else if(t instanceof ShutdownMessage)
+			{
+				log.info("Worker notified to shutdown");
+				return;
+			} 	else
 			{
 				throw new IllegalStateException("Recieved unknown message from worker actor");
 				

@@ -84,86 +84,90 @@ public class AkkaWorkerExecutor {
 			}
 			
 			
-			TargetAlgorithmEvaluator tae = opts.taeOptions.getTargetAlgorithmEvaluator(taeOpts);
-			
-			
-			
-			
-			String logLevel;
-			
-			switch(opts.log.logLevel)
+			try(TargetAlgorithmEvaluator tae = opts.taeOptions.getTargetAlgorithmEvaluator(taeOpts))
 			{
 			
-			case TRACE:
-				logLevel = "DEBUG";
-				break;
-			case WARN:
-				logLevel = "WARNING";
-				break;
-			case OFF:
-			case DEBUG:
-			case ERROR:
-			case INFO:
-				logLevel = opts.log.logLevel.name();
-				break;
 				
-			default:
-				throw new IllegalStateException("Unknown log level: " + opts.log.logLevel);
+				
+				
+				String logLevel;
+				
+				switch(opts.log.logLevel)
+				{
+				
+				case TRACE:
+					logLevel = "DEBUG";
+					break;
+				case WARN:
+					logLevel = "WARNING";
+					break;
+				case OFF:
+				case DEBUG:
+				case ERROR:
+				case INFO:
+					logLevel = opts.log.logLevel.name();
+					break;
+					
+				default:
+					throw new IllegalStateException("Unknown log level: " + opts.log.logLevel);
+				
+				}
 			
+				AkkaClusterOptions akkaClustOptions = ((AkkaTargetAlgorithmEvaluatorOptions)taeOpts.get(AkkaTargetAlgorithmEvaluatorFactory.getTAEName())).akkaClusterOptions;
+					
+				String configuration ="akka {\n" + 
+						"  loglevel = \""+logLevel+"\"\n" +
+						"  actor {\n" + 
+						"    provider = \"akka.cluster.ClusterActorRefProvider\"\n" + 
+						"  }\n" + 
+						"  remote {\n" + 
+						"    log-remote-lifecycle-events = off\n" + 
+						"  }\n" + 
+						"\n" + 
+						"  cluster {\n" +  
+						"    auto-down-unreachable-after = 10s\n" + 
+						"	  jmx.enabled = " + (akkaClustOptions.jmxEnabled ? "on" : "off") + "\n"+ 
+						"	  gossip-interval = "+akkaClustOptions.gossipInterval + " ms\n"+
+						"	  leader-actions-interval = "+ akkaClustOptions.leaderActionInterval+" ms\n"+
+						"	  unreachable-nodes-reaper-interval = " +akkaClustOptions.unreachableNodesReaperInterval+" ms\n"+
+						"	  periodic-tasks-initial-delay = "+ akkaClustOptions.periodicTasksInitialDelay + " ms\n"+
+						"	  failure-detector.heartbeat-interval = "+akkaClustOptions.failureDetectorHeartbeatInterval+" ms\n"+
+						"     failure-detector.acceptable-heartbeat-pause = " + akkaClustOptions.failureDetectorAcceptablePause +" ms\n"+
+						"     auto-down-unreachable-after = " +akkaClustOptions.autoDownUnreachableAfter+ " ms\n" + 
+						"  }\n" + 
+						"}\n";
+					
+					
+				ActorSystem system = AkkaHelper.startAkkaSystem(akkaClustOptions.networks, opts.dir, configuration, akkaClustOptions.id);	
+				
+				
+	
+				ActorRef singletonProxyManager = system.actorOf(ClusterSingletonManager.defaultProps(Props.create(TAEWorkerCoordinator.class), "coordinator", "END", null),"singleton");
+			
+	
+			
+				ActorRef singleton = system.actorOf(ClusterSingletonProxy.defaultProps("/user/singleton/coordinator",null),"coordinatoryProxy");
+				
+				ExecutorService execService = Executors.newSingleThreadExecutor(new SequentiallyNamedThreadFactory("Observer Inbox Monitor", true));
+				
+				
+				ActorRef clusterNode = system.actorOf(Props.create(ClusterManagerActor.class), "clusterManager");
+				
+				
+				
+				try 
+				{
+					AkkaWorker worker = new AkkaWorker();
+					Semaphore noopSemaphore = new Semaphore(1);
+					worker.executeWorker(opts, tae, system, execService, singleton, noopSemaphore);
+					
+				} finally
+				{
+					execService.shutdownNow();
+					system.shutdown();
+				}
 			}
-		
-			AkkaClusterOptions akkaClustOptions = ((AkkaTargetAlgorithmEvaluatorOptions)taeOpts.get(AkkaTargetAlgorithmEvaluatorFactory.getTAEName())).akkaClusterOptions;
 				
-			String configuration ="akka {\n" + 
-					"  loglevel = \""+logLevel+"\"\n" +
-					"  actor {\n" + 
-					"    provider = \"akka.cluster.ClusterActorRefProvider\"\n" + 
-					"  }\n" + 
-					"  remote {\n" + 
-					"    log-remote-lifecycle-events = off\n" + 
-					"  }\n" + 
-					"\n" + 
-					"  cluster {\n" +  
-					"    auto-down-unreachable-after = 10s\n" + 
-					"	  jmx.enabled = " + (akkaClustOptions.jmxEnabled ? "on" : "off") + "\n"+ 
-					"	  gossip-interval = "+akkaClustOptions.gossipInterval + " ms\n"+
-					"	  leader-actions-interval = "+ akkaClustOptions.leaderActionInterval+" ms\n"+
-					"	  unreachable-nodes-reaper-interval = " +akkaClustOptions.unreachableNodesReaperInterval+" ms\n"+
-					"	  periodic-tasks-initial-delay = "+ akkaClustOptions.periodicTasksInitialDelay + " ms\n"+
-					"	  failure-detector.heartbeat-interval = "+akkaClustOptions.failureDetectorHeartbeatInterval+" ms\n"+
-					"     failure-detector.acceptable-heartbeat-pause = " + akkaClustOptions.failureDetectorAcceptablePause +" ms\n"+
-					"     auto-down-unreachable-after = " +akkaClustOptions.autoDownUnreachableAfter+ " ms\n" + 
-					"  }\n" + 
-					"}\n";
-				
-				
-			ActorSystem system = AkkaHelper.startAkkaSystem(akkaClustOptions.networks, opts.dir, configuration, akkaClustOptions.id);	
-			
-			
-
-			ActorRef singletonProxyManager = system.actorOf(ClusterSingletonManager.defaultProps(Props.create(TAEWorkerCoordinator.class), "coordinator", "END", null),"singleton");
-		
-
-		
-			ActorRef singleton = system.actorOf(ClusterSingletonProxy.defaultProps("/user/singleton/coordinator",null),"coordinatoryProxy");
-			
-			ExecutorService execService = Executors.newSingleThreadExecutor(new SequentiallyNamedThreadFactory("Observer Inbox Monitor", true));
-			
-			
-			ActorRef clusterNode = system.actorOf(Props.create(ClusterManagerActor.class), "clusterManager");
-			
-			
-			
-			try 
-			{
-				AkkaWorker worker = new AkkaWorker();
-				Semaphore noopSemaphore = new Semaphore(1);
-				worker.executeWorker(opts, tae, system, execService, singleton, noopSemaphore);
-			} finally
-			{
-				system.shutdown();
-			}
-			
 			
 		} catch(ParameterException e)
 		{

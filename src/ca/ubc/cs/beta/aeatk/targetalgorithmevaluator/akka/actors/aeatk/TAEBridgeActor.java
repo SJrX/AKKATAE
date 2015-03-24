@@ -26,6 +26,7 @@ import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.AllAlgorithmR
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.RequestRunBatch;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.RequestRunConfigurationUpdate;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.RequestWorkers;
+import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.ShutdownMessage;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.WorkerAvailable;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.WorkerPermit;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.tae.DumpDebugInformation;
@@ -252,7 +253,16 @@ public class TAEBridgeActor extends UntypedActor {
 				child.tell(arg0, getSelf());
 			}
 				
-		} else 
+		} else if(arg0 instanceof ShutdownMessage)
+		{
+			nonStartedRequests.clear();
+			
+			for(ActorRef ref : this.requestsToManagingActorMap.values())
+			{
+				ref.tell(arg0, getSelf());
+			}
+		}	
+		else 
 		{
 			unhandled(arg0);
 		}

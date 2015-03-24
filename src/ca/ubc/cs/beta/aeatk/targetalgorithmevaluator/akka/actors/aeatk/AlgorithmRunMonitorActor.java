@@ -14,6 +14,7 @@ import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.AlgorithmRunP
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.AlgorithmRunStatus;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.RejectedExecution;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.RequestRunConfigurationUpdate;
+import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.ShutdownMessage;
 import akka.actor.ActorRef;
 import akka.actor.Cancellable;
 import akka.actor.Props;
@@ -83,7 +84,7 @@ public class AlgorithmRunMonitorActor extends UntypedActor {
 		{
 			if(!successful)
 			{
-				Terminated t = (Terminated) arg0;
+				
 				
 				//log.warn("Worker Rejected Execution, aborted");
 				context().parent().tell(new AlgorithmRunProcessingFailed(rc), getSelf());
@@ -121,6 +122,13 @@ public class AlgorithmRunMonitorActor extends UntypedActor {
 				successful = true;
 			}
 			
+		} else if(arg0 instanceof ShutdownMessage)
+		{
+			worker.tell(new RequestRunConfigurationUpdate(rc, true, uuid), getSelf());
+			context().stop(getSelf());
+		} else
+		{
+			unhandled(arg0);
 		}
 		
 	}

@@ -28,6 +28,7 @@ import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.AllAlgorithmR
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.RequestRunBatch;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.RequestRunConfigurationUpdate;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.RequestWorkers;
+import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.ShutdownMessage;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.WorkerAvailable;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.WorkerPermit;
 import ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.messages.tae.DumpDebugInformation;
@@ -303,14 +304,20 @@ public class AlgorithmRunBatchMonitorActor extends UntypedActor {
 			
 		} else if (arg0 instanceof Poll)
 		{
-		
-			/*
-			 * int runsNeeded = this.runsNeeded.get();
-			
-			
-			 */
 			requestWorkers(false);
-		}else
+		} else if(arg0 instanceof ShutdownMessage)
+		{
+			for(ActorRef ref : this.rcToChildActor.values())
+			{
+				ref.tell(arg0,getSelf());
+			}
+			
+			runsToDo.clear();
+			requestWorkers(true);
+			
+			context().stop(getSelf());
+			
+		} else
 		{
 			unhandled(arg0);
 		}
