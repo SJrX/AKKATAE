@@ -449,9 +449,13 @@ public class AkkaTargetAlgorithmEvaluatorTester {
 		try 
 		{
 			tae.notifyShutdown();
+			Thread.sleep(2500);
 		} catch(RuntimeException e)
 		{
 			e.printStackTrace();
+		} catch (InterruptedException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
 		}
 		
 	}

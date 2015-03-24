@@ -128,7 +128,8 @@ public class AkkaWorkerExecutor {
 						"    log-remote-lifecycle-events = off\n" + 
 						"  }\n" + 
 						"\n" + 
-						"  cluster {\n" +  
+						"  cluster {\n" + 
+						"    roles = [worker]\n" +
 						"    auto-down-unreachable-after = 10s\n" + 
 						"	  jmx.enabled = " + (akkaClustOptions.jmxEnabled ? "on" : "off") + "\n"+ 
 						"	  gossip-interval = "+akkaClustOptions.gossipInterval + " ms\n"+

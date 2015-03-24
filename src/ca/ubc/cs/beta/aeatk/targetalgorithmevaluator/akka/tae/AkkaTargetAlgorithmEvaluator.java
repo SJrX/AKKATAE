@@ -176,7 +176,8 @@ public class AkkaTargetAlgorithmEvaluator extends AbstractAsyncTargetAlgorithmEv
 				"    log-remote-lifecycle-events = off\n" + 
 				"  }\n" + 
 				"\n" + 
-				"  cluster {\n" + 		 
+				"  cluster {\n" +
+				"    roles = [tae]\n" +
 				"    auto-down-unreachable-after = 10s\n" + 
 				"	  jmx.enabled = " + (opts.akkaClusterOptions.jmxEnabled ? "on" : "off") + "\n"+ 
 				"	  gossip-interval = "+opts.akkaClusterOptions.gossipInterval + " ms\n"+
