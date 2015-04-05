@@ -18,13 +18,15 @@ public class RequestRunBatch implements Serializable {
 
 	private final UUID uuid;
 	
+	private final double priority;
 	
-	public RequestRunBatch(ActorRef observerRef, ActorRef completionRef, List<AlgorithmRunConfiguration> runsToRequest, UUID uuid)
+	public RequestRunBatch(ActorRef observerRef, ActorRef completionRef, List<AlgorithmRunConfiguration> runsToRequest, UUID uuid, double priority)
 	{
 		this.observerRef = observerRef;
 		this.completionRef = completionRef; 
 		this.runConfigurations = Collections.unmodifiableList(runsToRequest);
 		this.uuid = uuid;
+		this.priority = priority;
 	
 	}
 
@@ -49,4 +51,8 @@ public class RequestRunBatch implements Serializable {
 		return completionRef; 
 	}
 	
+	public double getPriority()
+	{
+		return priority;
+	}
 }

@@ -315,7 +315,7 @@ public class TAEBridgeActor extends UntypedActor {
 			
 			log.debug("Starting execution of batch : {}", rrb.getUUID());
 			
-			ActorRef delegate = this.context().actorOf(Props.create(AlgorithmRunBatchMonitorActor.class, rrb, 1.0, coordinator));
+			ActorRef delegate = this.context().actorOf(Props.create(AlgorithmRunBatchMonitorActor.class, rrb, rrb.getPriority(), coordinator));
 			
 			this.requestsToManagingActorMap.put(rrb.getUUID(), delegate);
 			

@@ -99,10 +99,10 @@ public class TAEWorkerActor extends UntypedActor {
 				currentRequest = rrcu;
 			
 				workerThreadInbox.tell(rrcu, getSelf());
-				log.debug("Starting run for {}, seed: {} ", rrcu.getUUID() , rrcu.getAlgorithmRunConfiguration().getProblemInstanceSeedPair().getSeed());
+				log.debug("Worker {} , Starting run for {}, seed: {} ",  ManagementFactory.getRuntimeMXBean().getName(),  rrcu.getUUID() , rrcu.getAlgorithmRunConfiguration().getProblemInstanceSeedPair().getSeed());
 				watchingActor = getSender();
 				latestStatus = new RunningAlgorithmRunResult(rrcu.getAlgorithmRunConfiguration(), 0, 0, 0, (long) 0, 0, null);
-			} else if(currentRequest.equals(rrcu))
+			} else if(currentRequest != null && currentRequest.equals(rrcu))
 			{
 				
 				getSender().tell(new AlgorithmRunStatus(latestStatus, currentRequest.getUUID()), getSelf());
@@ -129,8 +129,7 @@ public class TAEWorkerActor extends UntypedActor {
 				
 			} else
 			{
-				log.debug("Rejected execution for:  {} ", ((RequestRunConfigurationUpdate) arg0).getUUID());
-				//log.warn("Rejected execution for {}, seed: {}",((RequestRunConfigurationUpdate) arg0).getUUID(), ((RequestRunConfigurationUpdate) arg0).getAlgorithmRunConfiguration().getProblemInstanceSeedPair().getSeed());
+				log.debug("{} : Rejected execution for:  {} ", ManagementFactory.getRuntimeMXBean().getName(), ((RequestRunConfigurationUpdate) arg0).getUUID());
 				getSender().tell(new RejectedExecution(((RequestRunConfigurationUpdate) arg0).getAlgorithmRunConfiguration()), getSelf());
 			}
 		} else if (arg0 instanceof AlgorithmRunStatus)
@@ -153,7 +152,8 @@ public class TAEWorkerActor extends UntypedActor {
 				completedRequests.put(currentRequest, latestStatus);
 				currentRequest = null;
 				watchingActor = null;
-				log.trace("Worker done request, marking available");
+				log.warn("Worker {} done request, marking available",  ManagementFactory.getRuntimeMXBean().getName());
+				
 			}
 			
 			
@@ -168,7 +168,7 @@ public class TAEWorkerActor extends UntypedActor {
 			
 			if(currentRequest != null)
 			{
-				log.debug("Worker unavailable rejecting execution for:  {} ", currentRequest.getUUID());
+				log.debug("Worker {} unavailable rejecting execution for:  {} ",  ManagementFactory.getRuntimeMXBean().getName(), currentRequest.getUUID());
 				
 				
 				watchingActor.tell(new RejectedExecution(currentRequest.getAlgorithmRunConfiguration()), getSelf());
@@ -178,21 +178,23 @@ public class TAEWorkerActor extends UntypedActor {
 			}
 		} else if(arg0 instanceof Poll)
 		{
+			
 			if(currentRequest == null)
 			{
 				this.coordinator.tell(waMessage, getSelf());
-				log.debug("Notifying that worker is available: {}", waMessage.getWorkerName());
+				log.debug("Worker {} notify that it is available", waMessage.getWorkerName());
 			}
 		} else if(arg0 instanceof ShutdownMessage)
 		{
-		 workerThreadInbox.tell(arg0, getSelf());
-		 
-		 if(currentRequest != null)
-		 {
-			 observerThreadInbox.tell(new KillLocalRun(currentRequest.getAlgorithmRunConfiguration()),getSender());
-		 }
-		
-		 context().stop(getSelf());
+			
+			 workerThreadInbox.tell(arg0, getSelf());
+			 
+			 if(currentRequest != null)
+			 {
+				 observerThreadInbox.tell(new KillLocalRun(currentRequest.getAlgorithmRunConfiguration()),getSender());
+			 }
+			
+			 context().stop(getSelf());
 		}else
 		{
 			unhandled(arg0);

@@ -1,5 +1,6 @@
 package ca.ubc.cs.beta.aeatk.targetalgorithmevaluator.akka.actors.aeatk;
 
+import java.lang.management.ManagementFactory;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -64,6 +65,7 @@ public class AlgorithmRunMonitorActor extends UntypedActor {
 	@Override
 	public void preStart()
 	{
+		log.debug("Notifying worker to start processing run for {} and seed : {}  " ,uuid, rc.getProblemInstanceSeedPair().getSeed());
 		worker.tell(new RequestRunConfigurationUpdate(rc,false, uuid), getSelf());
 		context().watch(worker);
 		
@@ -100,7 +102,7 @@ public class AlgorithmRunMonitorActor extends UntypedActor {
 			//this.context().stop(getSelf());
 		}  else if(arg0 instanceof RequestRunConfigurationUpdate)
 		{
-			
+			log.debug("Request Run Configuration Update for UUID {} and seed {}", uuid, rc.getProblemInstanceSeedPair().getSeed());
 			
 			//No race condition here because this is single threaded
 			kill.set(((RequestRunConfigurationUpdate) arg0).getKillStatus() || kill.get());

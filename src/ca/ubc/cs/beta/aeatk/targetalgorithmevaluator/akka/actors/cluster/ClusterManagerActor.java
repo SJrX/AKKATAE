@@ -93,20 +93,20 @@ public class ClusterManagerActor extends UntypedActor {
 			    MemberUp mUp = (MemberUp) message;
 			   
 			    allNodes.add(mUp.member().address());
-			    System.out.println("Member" + mUp.member().address() + " has roles " + mUp.member().getRoles());
+			    System.out.println("[" +this.getSelf() + "] Member:" + mUp.member().address() + " has roles " + mUp.member().getRoles());
 			    
 			    if(mUp.member().getRoles().contains("worker"))
     			{
     				workerNodes.add(mUp.member().address());
     				startTimes.put(mUp.member().address(), System.currentTimeMillis());
-    			} else if(mUp.member().getRoles().contains("tae"))
+    			} 
+			    
+			    if(mUp.member().getRoles().contains("tae"))
     			{
     				taeNodes.add(mUp.member().address());
-    			} else
-    			{
-    				log.error("Unknown role for worker: {}", mUp.member().getRoles());
-    			}
-    			
+    			} 
+			    
+			    
 			    
 			    numberOfNodes++;
 			    
@@ -135,12 +135,11 @@ public class ClusterManagerActor extends UntypedActor {
 		    			{
 		    				workerNodes.add(mb.address());
 		    				startTimes.put(mb.address(), startTime);
-		    			} else if(mb.getRoles().contains("tae"))
+		    			}
+		    			
+		    			if(mb.getRoles().contains("tae"))
 		    			{
 		    				taeNodes.add(mb.address());
-		    			} else
-		    			{
-		    				log.error("Unknown role for worker: {}", mb.getRoles());
 		    			}
 		    			
 		    			numberOfNodes++;

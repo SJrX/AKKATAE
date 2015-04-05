@@ -75,4 +75,8 @@ public class RequestWorkers implements Serializable, Comparable<RequestWorkers>{
 	{
 		return uuid;
 	}
+
+	public double getPriority() {
+		return priority;
+	}
 }

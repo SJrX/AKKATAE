@@ -88,7 +88,7 @@
 
 			<path id="compile.classpath">
 				<fileset dir="lib" id="lib">
-					<include name="**/*.jar"/>
+					<include name="*.jar"/>
 				</fileset>
 			
 				<fileset dir="${aeatk.location}/" id="aeatk">

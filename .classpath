@@ -4,55 +4,17 @@
 	<classpathentry kind="src" path="test"/>
 	<classpathentry kind="src" path="version"/>
 	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/java-7-openjdk-amd64"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/akka-actor_2.11-2.3.9.jar" sourcepath="lib/akka-2.3.9/lib/akka/akka-actor_2.11-2.3.9.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/akka-agent_2.11-2.3.9.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/akka-camel_2.11-2.3.9.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/akka-cluster_2.11-2.3.9.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/akka-contrib_2.11-2.3.9.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/akka-dataflow_2.11-2.3.9.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/akka-durable-mailboxes-2.3.9.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/akka-file-mailbox_2.11-2.3.9.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/akka-kernel_2.11-2.3.9.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/akka-mailboxes-common_2.11-2.3.9.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/akka-multi-node-testkit_2.11-2.3.9.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/akka-persistence-experimental_2.11-2.3.9.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/akka-persistence-tck-experimental_2.11-2.3.9.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/akka-remote_2.11-2.3.9.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/akka-remote-tests_2.11-2.3.9.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/akka-slf4j_2.11-2.3.9.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/akka-testkit_2.11-2.3.9.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/akka-transactor_2.11-2.3.9.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/akka-zeromq_2.11-2.3.9.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/camel-core-2.10.3.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/config-1.2.1.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/guava-12.0.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/hamcrest-core-1.3.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/hawtjni-runtime-1.8.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/jna-3.0.9.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/jnr-constants-0.8.2.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/jsr305-1.3.9.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/junit-4.11.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/leveldb-0.5.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/leveldb-api-0.5.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/leveldbjni-1.7.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/leveldbjni-all-1.7.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/leveldbjni-linux32-1.5.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/leveldbjni-linux64-1.5.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/leveldbjni-osx-1.5.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/leveldbjni-win32-1.5.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/leveldbjni-win64-1.5.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/netty-3.8.0.Final.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/protobuf-java-2.5.0.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/scala-continuations-library_2.11-1.0.2.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/scala-reflect-2.11.0.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/scala-stm_2.11-0.7.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/scalatest_2.11-2.1.3.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/slf4j-api-1.7.5.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/uncommons-maths-1.2.2a.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/akka/zeromq-scala-binding_2.11-0.0.7-spark.jar"/>
-	<classpathentry kind="lib" path="lib/akka-2.3.9/lib/scala-library-2.11.5.jar"/>
 	<classpathentry combineaccessrules="false" kind="src" path="/AEATK"/>
 	<classpathentry kind="lib" path="/AEATK/lib/spi-0.2.4.jar"/>
+	<classpathentry kind="lib" path="lib/akka-actor_2.11-2.3.9.jar"/>
+	<classpathentry kind="lib" path="lib/akka-cluster_2.11-2.3.9.jar"/>
+	<classpathentry kind="lib" path="lib/akka-remote_2.11-2.3.9.jar"/>
+	<classpathentry kind="lib" path="lib/config-1.2.1.jar"/>
+	<classpathentry kind="lib" path="lib/netty-3.8.0.Final.jar"/>
+	<classpathentry kind="lib" path="lib/protobuf-java-2.5.0.jar"/>
+	<classpathentry kind="lib" path="lib/scala-library-2.11.5.jar"/>
+	<classpathentry kind="lib" path="lib/uncommons-maths-1.2.2a.jar"/>
+	<classpathentry kind="lib" path="lib/akka-contrib_2.11-2.3.9.jar"/>
 	<classpathentry kind="con" path="org.eclipse.jdt.junit.JUNIT_CONTAINER/4"/>
 	<classpathentry kind="lib" path="/AEATK/lib/commons-collections-3.2.1.jar"/>
 	<classpathentry kind="lib" path="/AEATK/lib/jcommander.jar"/>
@@ -61,5 +23,27 @@
 			<attribute name="optional" value="true"/>
 		</attributes>
 	</classpathentry>
+	<classpathentry kind="lib" path="/AEATK/lib/slf4j-api-1.7.5.jar"/>
+	<classpathentry kind="lib" path="/AEATK/lib/commons-io-2.1.jar"/>
+	<classpathentry kind="lib" path="/AEATK/lib/commons-math-2.2.jar"/>
+	<classpathentry kind="lib" path="/AEATK/lib/commons-math3-3.3.jar" sourcepath="/SMAC/lib/commons-math3-3.0/commons-math3-3.0-sources.jar"/>
+	<classpathentry kind="lib" path="/AEATK/lib/DomainInter.jar"/>
+	<classpathentry kind="lib" path="/AEATK/lib/exp4j-0.3.10-sources.jar"/>
+	<classpathentry kind="lib" path="/AEATK/lib/exp4j-0.3.10.jar"/>
+	<classpathentry kind="lib" path="/AEATK/lib/exp4j-0.4.3.BETA-3-sources.jar"/>
+	<classpathentry kind="lib" path="/AEATK/lib/exp4j-0.4.3.BETA-3.jar"/>
+	<classpathentry kind="lib" path="/AEATK/lib/guava-14.0.1-sources.jar"/>
+	<classpathentry kind="lib" path="/AEATK/lib/guava-14.0.1.jar" sourcepath="/AEATK/lib/guava-14.0.1-sources.jar"/>
+	<classpathentry kind="lib" path="/AEATK/lib/jackson-annotations-2.3.1.jar"/>
+	<classpathentry kind="lib" path="/AEATK/lib/jackson-core-2.3.1.jar" sourcepath="/home/sjr/git/jackson-core/src/main/java"/>
+	<classpathentry kind="lib" path="/AEATK/lib/jackson-databind-2.3.1.jar" sourcepath="/home/sjr/git/jackson-databind/src/main/java"/>
+	<classpathentry kind="lib" path="/AEATK/lib/Jama-1.0.2.jar"/>
+	<classpathentry kind="lib" path="/AEATK/lib/jcip-annotations-src.jar"/>
+	<classpathentry kind="lib" path="/AEATK/lib/jcip-annotations.jar" sourcepath="/AEATK/lib/jcip-annotations-src.jar"/>
+	<classpathentry kind="lib" path="/AEATK/lib/logback-access-1.1.2.jar"/>
+	<classpathentry kind="lib" path="/AEATK/lib/logback-classic-1.1.2.jar" sourcepath="/AEATK/libsrc/logback-classic-1.1.2-sources.jar"/>
+	<classpathentry kind="lib" path="/AEATK/lib/logback-core-1.1.2.jar"/>
+	<classpathentry kind="lib" path="/AEATK/lib/numerics4j-1.3.jar"/>
+	<classpathentry kind="lib" path="/AEATK/lib/opencsv-2.3.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

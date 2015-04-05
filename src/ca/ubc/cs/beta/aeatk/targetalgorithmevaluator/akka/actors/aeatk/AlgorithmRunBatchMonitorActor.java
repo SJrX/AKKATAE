@@ -170,7 +170,11 @@ public class AlgorithmRunBatchMonitorActor extends UntypedActor {
 						log.debug("UUID: {} , Sending worker permit {} back to {} ", uuid, wp.getWorkerName(), this.coordinator);
 						this.coordinator.tell(new WorkerAvailable(wp.getWorker(), wp.getWorkerName()), getSelf());
 						requestWorkers(true);
+					} else
+					{
+						log.debug("UUID: {} , We don't need it and worker isn't for us: {} ", uuid, wp.getWorkerName());
 					}
+					
 					
 					
 					
@@ -190,6 +194,9 @@ public class AlgorithmRunBatchMonitorActor extends UntypedActor {
 					log.debug("UUID: {} , Sending worker permit {} back to {} ", uuid, wp.getWorkerName(), this.coordinator);
 					this.coordinator.tell(new WorkerAvailable(wp.getWorker(), wp.getWorkerName()), getSelf());
 					requestWorkers(true);
+				} else
+				{
+					log.debug("UUID: {} , We don't need it and worker isn't for us: {} ", uuid, wp.getWorkerName());
 				}
 				
 				
